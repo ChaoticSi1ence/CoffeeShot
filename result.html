@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>CoffeeShot</title>
+  <link rel="stylesheet" href="result.css">
+</head>
+<body>
+  <header>
+    <div class="tools">
+      <button data-tool="pen" class="on" title="Pen (P)">Pen</button>
+      <button data-tool="rect" title="Rectangle (R)">Rectangle</button>
+      <button data-tool="arrow" title="Arrow (A)">Arrow</button>
+      <span class="colors">
+        <button data-color="#e53935" class="on" style="background:#e53935" title="Red"></button>
+        <button data-color="#fdd835" style="background:#fdd835" title="Yellow"></button>
+        <button data-color="#1e88e5" style="background:#1e88e5" title="Blue"></button>
+        <button data-color="#111111" style="background:#111111" title="Black"></button>
+      </span>
+      <button id="undo" title="Undo (Ctrl+Z)">Undo</button>
+    </div>
+    <div class="actions">
+      <span id="status"></span>
+      <button id="copy" title="Copy to clipboard (Ctrl+C)">Copy</button>
+      <button id="save" class="primary" title="Save to Downloads (Enter or Ctrl+S)" autofocus>Save</button>
+    </div>
+  </header>
+  <p id="note" hidden></p>
+  <main id="stage">
+    <div id="wrap">
+      <canvas id="base"></canvas>
+      <canvas id="ink"></canvas>
+    </div>
+  </main>
+  <script src="result.js"></script>
+</body>
+</html>

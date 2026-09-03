@@ -1,14 +1,16 @@
 {
   "manifest_version": 3,
   "name": "CoffeeShot",
-  "version": "1.0.0",
-  "description": "Click the cup to save a PNG of the visible tab to your Downloads folder.",
-  "permissions": ["activeTab", "downloads"],
+  "version": "1.1.0",
+  "minimum_chrome_version": "116",
+  "description": "Screenshot the visible tab, a dragged area, or the full page. Mark it up, then copy it or save it as a PNG.",
+  "homepage_url": "https://github.com/ChaoticSi1ence/CoffeeShot",
+  "permissions": ["activeTab", "scripting", "contextMenus", "downloads"],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "CoffeeShot: save a screenshot of this tab",
+    "default_title": "CoffeeShot: drag an area, F for full page, V for visible tab",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
@@ -16,10 +18,16 @@
       "128": "icons/icon128.png"
     }
   },
+  "commands": {
+    "_execute_action": {},
+    "save-visible": {
+      "description": "Save the visible tab to Downloads right away"
+    }
+  },
   "icons": {
-    "16": "icons/icon16.png",
-    "32": "icons/icon32.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
+    "16": "icons/app/icon16.png",
+    "32": "icons/app/icon32.png",
+    "48": "icons/app/icon48.png",
+    "128": "icons/app/icon128.png"
   }
 }
