@@ -85,7 +85,10 @@
             animation: cs-fade .13s ease-out both !important; }
     canvas { position: absolute; left: 0; top: 0; width: 100vw; height: 100vh; display: block; }
     .dim { position: absolute; inset: 0; background: rgba(0,0,0,.45); }
-    .sel { position: absolute; border: 1px solid #fff; box-shadow: 0 0 0 200vmax rgba(0,0,0,.45); }
+    /* Four plain rectangles dim everything outside the selection. One huge
+       box-shadow would repaint the entire window on every mouse move. */
+    .masks > div { position: absolute; background: rgba(0,0,0,.45); }
+    .sel { position: absolute; border: 1px solid #fff; }
     .size { position: absolute; background: #222; color: #fff; font: 12px system-ui, sans-serif; padding: 2px 6px;
             border-radius: 4px; animation: cs-fade .1s ease-out both; }
     .pill, .bar { position: absolute; display: flex; gap: 8px; align-items: center; background: #222; color: #fff;
@@ -114,7 +117,9 @@
 
   function picker({ id, mode, snapshot }) {
     const { host, root } = mount(PICKER_CSS,
-      `<canvas></canvas><div class="dim"></div><div class="sel" hidden></div><div class="size" hidden></div>` +
+      `<canvas></canvas><div class="dim"></div>` +
+      `<div class="masks" hidden><div></div><div></div><div></div><div></div></div>` +
+      `<div class="sel" hidden></div><div class="size" hidden></div>` +
       `<div class="bar" hidden><button data-a="copy" class="primary">Copy</button><button data-a="save">Save</button><button data-a="edit">Edit</button></div>` +
       `<div class="pill">Drag to capture an area` +
       (mode === "pick"
@@ -123,6 +128,7 @@
       `<span>Esc to cancel</span></div>`);
     const canvas = root.querySelector("canvas"), dim = root.querySelector(".dim");
     const sel = root.querySelector(".sel"), size = root.querySelector(".size");
+    const masks = root.querySelector(".masks"), mask = masks.children;
     const pill = root.querySelector(".pill"), bar = root.querySelector(".bar");
     const prevFocus = document.activeElement;
     let start = null, selRect = null, closed = false, busy = false;
@@ -247,7 +253,7 @@
       bar.hidden = true;
       pill.hidden = false;
       start = [e.clientX, e.clientY];
-      dim.hidden = true; sel.hidden = false; size.hidden = false;
+      dim.hidden = true; masks.hidden = false; sel.hidden = false; size.hidden = false;
       place(e);
     });
     root.addEventListener("mousemove", (e) => { if (start) place(e); });
@@ -263,7 +269,7 @@
 
     function reset() {
       selRect = null;
-      dim.hidden = false; sel.hidden = true; size.hidden = true; bar.hidden = true;
+      dim.hidden = false; masks.hidden = true; sel.hidden = true; size.hidden = true; bar.hidden = true;
       pill.hidden = false;
     }
 
@@ -286,9 +292,17 @@
       const x2 = Math.min(innerWidth, Math.max(start[0], e.clientX)), y2 = Math.min(innerHeight, Math.max(start[1], e.clientY));
       return { x, y, w: x2 - x, h: y2 - y };
     }
+    function box(el, x, y, w, h) {
+      el.style.left = x + "px"; el.style.top = y + "px";
+      el.style.width = Math.max(0, w) + "px"; el.style.height = Math.max(0, h) + "px";
+    }
     function place(e) {
       const r = rect(e);
       sel.style.left = r.x + "px"; sel.style.top = r.y + "px"; sel.style.width = r.w + "px"; sel.style.height = r.h + "px";
+      box(mask[0], 0, 0, innerWidth, r.y);                                   // above
+      box(mask[1], 0, r.y + r.h, innerWidth, innerHeight - r.y - r.h);       // below
+      box(mask[2], 0, r.y, r.x, r.h);                                        // left
+      box(mask[3], r.x + r.w, r.y, innerWidth - r.x - r.w, r.h);             // right
       size.textContent = `${r.w} × ${r.h}`;
       size.style.left = r.x + "px";
       size.style.top = (r.y - 24 < 4 ? r.y + 4 : r.y - 24) + "px";
@@ -324,10 +338,19 @@
 
   // Fixed and pinned sticky elements would repeat in every strip. Collect the
   // candidates at the top of the page with where they sit...
+  // getComputedStyle is the expensive part, so anything that cannot carry a
+  // useful position is filtered out with plain property reads first. SVG
+  // internals are skipped but the <svg> element itself is not.
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const SKIP = new Set(["SCRIPT", "STYLE", "LINK", "META", "TITLE", "NOSCRIPT", "TEMPLATE",
+    "BR", "OPTION", "OPTGROUP", "SOURCE", "TRACK", "PARAM", "COL", "COLGROUP", "HEAD"]);
+
   function pinnedCandidates(scroller) {
     const out = [];
     for (const el of document.querySelectorAll("*")) {
       if (el === document.documentElement || el === document.head || el === document.body) continue;
+      if (SKIP.has(el.tagName)) continue;
+      if (el.parentNode && el.parentNode.namespaceURI === SVG_NS) continue;
       if (scroller && (el === scroller || el.contains(scroller))) continue;
       const pos = getComputedStyle(el).position;
       if (pos === "fixed" || pos === "sticky") out.push([el, pos, el.getBoundingClientRect().top]);
@@ -369,9 +392,14 @@
       for (const n of el ? [rootEl, el] : [rootEl]) { force(n, "scroll-behavior", "auto"); force(n, "scroll-snap-type", "none"); }
       // Nudge lazy-loaded content: bottom, then back to top.
       scroller.scrollTop = scroller.scrollHeight; await sleep(250);
-      scroller.scrollTop = 0; await sleep(250);
-      const total = scroller.scrollHeight;
+      scroller.scrollTop = 0;
+      // Scan for pinned elements while the page settles rather than after it,
+      // so on a heavy document the scan costs no extra wall time.
+      const settle = sleep(250);
+      await frames(1);
       const candidates = pinnedCandidates(el);
+      await settle;
+      const total = scroller.scrollHeight;
       let y = 0, prev = -1;
       for (let i = 0; ; i++) {
         scroller.scrollTop = y;

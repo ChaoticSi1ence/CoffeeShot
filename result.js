@@ -8,6 +8,7 @@ const id = location.hash.slice(1);
 const MAX_SIDE = 16384;   // memory and encode-time budget; Blink's own side limit is 65,535 px
 
 let ready = false, saving = false, ops = [], cur = null, tool = "pen", color = "#e53935", stroke = 3;
+let live = null, frame = 0;   // bounds of the shape being dragged, and its queued frame
 
 const status = (t) => { $("#status").textContent = t; };
 const ask = (msg) => chrome.runtime.sendMessage({ id, ...msg });
@@ -144,10 +145,64 @@ function drawOp(ctx, op) {
   }
 }
 
-function redraw() {
+// A full-page canvas runs to tens of millions of pixels, so clearing and
+// replaying every stroke on each pointer move is far too expensive. Pen
+// strokes are extended one segment at a time, and the shapes that change
+// shape as you drag only repaint the rectangle they occupy.
+
+function redrawAll() {
   ictx.clearRect(0, 0, ink.width, ink.height);
   for (const op of ops) drawOp(ictx, op);
   if (cur) drawOp(ictx, cur);
+  live = null;
+}
+
+function bounds(op) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y] of op.pts) {
+    if (x < x0) x0 = x;
+    if (y < y0) y0 = y;
+    if (x > x1) x1 = x;
+    if (y > y1) y1 = y;
+  }
+  const pad = op.width * 5 + 4;   // round caps, joins and the arrow head
+  return [x0 - pad, y0 - pad, x1 + pad, y1 + pad];
+}
+
+const union = (a, b) => [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])];
+
+// Clear one rectangle and put back the committed strokes that cross it.
+function repaint([x0, y0, x1, y1]) {
+  ictx.save();
+  ictx.beginPath();
+  ictx.rect(x0, y0, x1 - x0, y1 - y0);
+  ictx.clip();
+  ictx.clearRect(x0, y0, x1 - x0, y1 - y0);
+  for (const op of ops) drawOp(ictx, op);
+  ictx.restore();
+}
+
+function paintLive() {
+  frame = 0;
+  if (!cur || cur.tool === "pen") return;
+  const box = bounds(cur);
+  repaint(live ? union(live, box) : box);
+  drawOp(ictx, cur);
+  live = box;
+}
+
+// Extend a pen stroke by its newest segment, leaving everything else alone.
+function drawSegment(op) {
+  const n = op.pts.length;
+  if (n < 2) return;
+  ictx.strokeStyle = op.color;
+  ictx.lineWidth = op.width;
+  ictx.lineCap = "round";
+  ictx.lineJoin = "round";
+  ictx.beginPath();
+  ictx.moveTo(op.pts[n - 2][0], op.pts[n - 2][1]);
+  ictx.lineTo(op.pts[n - 1][0], op.pts[n - 1][1]);
+  ictx.stroke();
 }
 
 function pt(e) {
@@ -157,7 +212,10 @@ function pt(e) {
 
 function commit() {
   if (!cur) return;
-  ops.push(cur); cur = null; redraw();
+  if (cur.tool !== "pen") paintLive();   // a queued frame may not have run yet
+  ops.push(cur);
+  cur = null;
+  live = null;
 }
 
 ink.addEventListener("pointerdown", (e) => {
@@ -165,13 +223,18 @@ ink.addEventListener("pointerdown", (e) => {
   ink.setPointerCapture(e.pointerId);
   const p = pt(e);
   cur = { tool, color, width: stroke, pts: [p, p] };
-  redraw();
+  live = null;
 });
 ink.addEventListener("pointermove", (e) => {
   if (!cur) return;
   const p = pt(e);
-  if (cur.tool === "pen") cur.pts.push(p); else cur.pts[1] = p;
-  redraw();
+  if (cur.tool === "pen") {
+    cur.pts.push(p);
+    drawSegment(cur);
+  } else {
+    cur.pts[1] = p;
+    if (!frame) frame = requestAnimationFrame(paintLive);
+  }
 });
 for (const t of ["pointerup", "pointercancel", "lostpointercapture"]) ink.addEventListener(t, commit);
 
@@ -191,7 +254,7 @@ document.querySelectorAll("[data-tool]").forEach((b) => b.addEventListener("clic
 document.querySelectorAll("[data-color]").forEach((b) => b.addEventListener("click", () => pickColor(b.dataset.color, b)));
 const custom = $("#custom");
 for (const t of ["input", "change", "click"]) custom.addEventListener(t, () => pickColor(custom.value, custom));
-$("#undo").addEventListener("click", () => { ops.pop(); redraw(); });
+$("#undo").addEventListener("click", () => { ops.pop(); redrawAll(); });
 
 // ---- output ---------------------------------------------------------------
 
@@ -269,7 +332,7 @@ $("#save").addEventListener("click", save);
 document.addEventListener("keydown", (e) => {
   if (e.repeat) return;
   const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
-  if (mod && k === "z") { e.preventDefault(); ops.pop(); redraw(); }
+  if (mod && k === "z") { e.preventDefault(); ops.pop(); redrawAll(); }
   else if (mod && k === "s") { e.preventDefault(); save(); }
   else if (mod && k === "c") {
     const s = getSelection();
