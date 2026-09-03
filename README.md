@@ -4,6 +4,9 @@ Screenshot the visible tab, a dragged area, or the full page. Mark it up,
 then copy it or save it as a PNG. A Brave extension made of plain files, with
 no network access.
 
+It is plain Manifest V3 with no Brave-specific APIs, so it should run in Chrome
+and other Chromium browsers too. Brave is the only one it has been tested in.
+
 ## Use
 
 Click the cup. The page freezes under a picker:
@@ -20,11 +23,11 @@ Click the cup. The page freezes under a picker:
 - **Esc** cancels.
 
 Edit, full page and visible tab open a CoffeeShot tab next to the page. Draw on
-it with the pen, rectangle or arrow in four colours, or pick any colour you
-like from the swatch at the end of the row (Ctrl+Z undoes), then
-**Copy** puts the PNG on the clipboard and **Save** (Enter or Ctrl+S) writes
-`coffeeshot-YYYY-MM-DD_HH-MM-SS.png` to Downloads. The tab closes itself once
-you have copied or saved.
+it with the pen (**P**), rectangle (**R**) or arrow (**A**) in four colours, or
+pick any colour you like from the swatch at the end of the row. **Ctrl+Z**
+undoes. **Copy** (Ctrl+C) puts the PNG on the clipboard and **Save** (Enter or
+Ctrl+S) writes `coffeeshot-YYYY-MM-DD_HH-MM-SS.png` to Downloads. The tab
+closes itself once you have copied or saved.
 
 Right-click a page and you get one **CoffeeShot** entry, not a submenu, which
 opens the same picker. Right-click the cup itself for the three captures
@@ -35,9 +38,14 @@ tab, a green OK on the cup. That is what 1.0 did on every click.
 no way to opt out, so the page menu keeps a single entry on purpose.)
 
 No keys are bound by default, because Brave uses Ctrl+Shift+S for its own
-screenshot tool. Set yours at `brave://extensions/shortcuts`; Alt+Shift+S and
-Alt+Shift+D are free. To put CoffeeShot on Ctrl+Shift+S, first clear Brave's
-"Sharing hub screenshot" binding at `brave://settings/system/shortcuts`.
+screenshot tool. There are two to bind at `brave://extensions/shortcuts`: one
+opens the picker, the other saves the visible tab straight away. Alt+Shift+S
+and Alt+Shift+D are free. To put CoffeeShot on Ctrl+Shift+S, first clear
+Brave's "Sharing hub screenshot" binding at
+`brave://settings/system/shortcuts`.
+
+The overlay, the toolbars and the markup tab ease in rather than appearing
+cold. With "reduce motion" turned on in Windows, none of that animation runs.
 
 ## Install
 
@@ -81,6 +89,8 @@ from the Chrome Web Store. A self-signed `.crx` dropped on
   nested scrollers and lazy-loading pages can come out incomplete.
 - The result tab keeps its capture while it is open; reloading it rebuilds
   the image but not your drawings.
+- Clicking the cup on a CoffeeShot tab flashes a red `!` and does nothing. It
+  will not screenshot itself.
 - If Brave is set to "Ask where to save each file before downloading", you
   get the save dialog.
 
