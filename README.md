@@ -39,4 +39,6 @@ That's all it does. No popup, no settings, no network access.
 - `manifest.json` - permissions are `activeTab` (the tab you clicked on,
   only while you click) and `downloads` (to save the file).
 - `background.js` - the whole thing, about 50 lines.
-- `icons/` - generated coffee cup icons.
+- `icons/` - white coffee cup glyph, drawn for a dark toolbar. `icons/dark/` is
+  the same glyph in dark grey for a light toolbar: point the paths in
+  `manifest.json` there if the white one is hard to see.
