@@ -54,11 +54,18 @@
   function toast(text) {
     const { host, root } = mount(
       `:host { ${HOST} left: 0 !important; right: 0 !important; top: 16px !important; display: flex !important; justify-content: center !important; pointer-events: none !important; }
-       div { background: #222; color: #fff; font: 14px system-ui, sans-serif; padding: 8px 14px; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.4); }`,
+       div { background: #222; color: #fff; font: 14px system-ui, sans-serif; padding: 8px 14px; border-radius: 8px;
+             box-shadow: 0 4px 16px rgba(0,0,0,.4); animation: cs-toast-in .2s cubic-bezier(.2,.8,.3,1) both; }
+       div.out { animation: cs-toast-out .3s ease-in both; }
+       @keyframes cs-toast-in { from { opacity: 0; transform: translateY(-12px) } to { opacity: 1; transform: none } }
+       @keyframes cs-toast-out { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(-8px) } }
+       @media (prefers-reduced-motion: reduce) { div, div.out { animation: none !important } }`,
       `<div></div>`
     );
-    root.querySelector("div").textContent = text;
-    setTimeout(() => host.remove(), 4000);
+    const el = root.querySelector("div");
+    el.textContent = text;
+    setTimeout(() => el.classList.add("out"), 3600);
+    setTimeout(() => host.remove(), 3950);
   }
 
   function toBlob(dataUrl) {
@@ -70,24 +77,39 @@
 
   // ---- picker -------------------------------------------------------------
 
+  // Animations run on entrance only. The overlay is torn down synchronously,
+  // because a fading overlay could still be on screen when the next
+  // captureVisibleTab fires during a full-page run.
   const PICKER_CSS = `
-    :host { ${HOST} inset: 0 !important; cursor: crosshair !important; user-select: none !important; }
+    :host { ${HOST} inset: 0 !important; cursor: crosshair !important; user-select: none !important;
+            animation: cs-fade .13s ease-out both !important; }
     canvas { position: absolute; left: 0; top: 0; width: 100vw; height: 100vh; display: block; }
     .dim { position: absolute; inset: 0; background: rgba(0,0,0,.45); }
     .sel { position: absolute; border: 1px solid #fff; box-shadow: 0 0 0 200vmax rgba(0,0,0,.45); }
-    .size { position: absolute; background: #222; color: #fff; font: 12px system-ui, sans-serif; padding: 2px 6px; border-radius: 4px; }
+    .size { position: absolute; background: #222; color: #fff; font: 12px system-ui, sans-serif; padding: 2px 6px;
+            border-radius: 4px; animation: cs-fade .1s ease-out both; }
     .pill, .bar { position: absolute; display: flex; gap: 8px; align-items: center; background: #222; color: #fff;
                   font: 14px system-ui, sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,.4); cursor: default; white-space: nowrap; }
-    .pill { left: 50%; top: 16px; transform: translateX(-50%); padding: 8px 14px; border-radius: 999px; }
-    .bar { padding: 6px; border-radius: 8px; }
-    .pill button, .bar button { all: initial; font: 14px system-ui, sans-serif; color: #fff; background: #444; cursor: pointer; }
+    .pill { left: 50%; top: 16px; transform: translateX(-50%); padding: 8px 14px; border-radius: 999px;
+            animation: cs-drop .2s cubic-bezier(.2,.8,.3,1) both; }
+    .bar { padding: 6px; border-radius: 8px; transform-origin: 100% 0;
+           animation: cs-pop .16s cubic-bezier(.2,.85,.3,1.15) both; }
+    .pill button, .bar button { all: initial; font: 14px system-ui, sans-serif; color: #fff; background: #444;
+                                cursor: pointer; transition: background .12s ease, transform .12s ease; }
     .pill button { padding: 4px 10px; border-radius: 999px; }
     .bar button { padding: 6px 12px; border-radius: 6px; }
     .pill button:hover, .bar button:hover { background: #666; }
+    .bar button:active { transform: scale(.96); }
     .bar button.primary { background: #1e88e5; }
     .bar button.primary:hover { background: #1976d2; }
     .pill span { opacity: .7; }
     [hidden] { display: none !important; }
+    @keyframes cs-fade { from { opacity: 0 } to { opacity: 1 } }
+    @keyframes cs-drop { from { opacity: 0; transform: translateX(-50%) translateY(-12px) }
+                         to { opacity: 1; transform: translateX(-50%) translateY(0) } }
+    @keyframes cs-pop { from { opacity: 0; transform: translateY(-6px) scale(.94) }
+                        to { opacity: 1; transform: none } }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important } }
   `;
 
   function picker({ id, mode, snapshot }) {

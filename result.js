@@ -175,12 +175,22 @@ ink.addEventListener("pointermove", (e) => {
 });
 for (const t of ["pointerup", "pointercancel", "lostpointercapture"]) ink.addEventListener(t, commit);
 
-function pick(kind, value) {
-  if (kind === "tool") tool = value; else color = value;
-  document.querySelectorAll(`[data-${kind}]`).forEach((b) => b.classList.toggle("on", b.dataset[kind] === value));
+function pickTool(value) {
+  tool = value;
+  document.querySelectorAll("[data-tool]").forEach((b) => b.classList.toggle("on", b.dataset.tool === value));
 }
-document.querySelectorAll("[data-tool]").forEach((b) => b.addEventListener("click", () => pick("tool", b.dataset.tool)));
-document.querySelectorAll("[data-color]").forEach((b) => b.addEventListener("click", () => pick("color", b.dataset.color)));
+
+// The swatches and the colour input share one selected state, so whichever
+// was touched last is the one that draws.
+function pickColor(value, el) {
+  color = value;
+  document.querySelectorAll(".colors > *").forEach((b) => b.classList.toggle("on", b === el));
+}
+
+document.querySelectorAll("[data-tool]").forEach((b) => b.addEventListener("click", () => pickTool(b.dataset.tool)));
+document.querySelectorAll("[data-color]").forEach((b) => b.addEventListener("click", () => pickColor(b.dataset.color, b)));
+const custom = $("#custom");
+for (const t of ["input", "change", "click"]) custom.addEventListener(t, () => pickColor(custom.value, custom));
 $("#undo").addEventListener("click", () => { ops.pop(); redraw(); });
 
 // ---- output ---------------------------------------------------------------
@@ -267,7 +277,7 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault(); copy();
   } else if (!mod && !e.altKey) {
     if (e.key === "Enter") { if (!(e.target instanceof HTMLButtonElement)) { e.preventDefault(); save(); } }
-    else if (k === "p") pick("tool", "pen"); else if (k === "r") pick("tool", "rect"); else if (k === "a") pick("tool", "arrow");
+    else if (k === "p") pickTool("pen"); else if (k === "r") pickTool("rect"); else if (k === "a") pickTool("arrow");
   }
 });
 

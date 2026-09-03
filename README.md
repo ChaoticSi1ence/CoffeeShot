@@ -20,7 +20,8 @@ Click the cup. The page freezes under a picker:
 - **Esc** cancels.
 
 Edit, full page and visible tab open a CoffeeShot tab next to the page. Draw on
-it with the pen, rectangle or arrow in four colours (Ctrl+Z undoes), then
+it with the pen, rectangle or arrow in four colours, or pick any colour you
+like from the swatch at the end of the row (Ctrl+Z undoes), then
 **Copy** puts the PNG on the clipboard and **Save** (Enter or Ctrl+S) writes
 `coffeeshot-YYYY-MM-DD_HH-MM-SS.png` to Downloads. The tab closes itself once
 you have copied or saved.
