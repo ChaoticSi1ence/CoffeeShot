@@ -139,11 +139,50 @@ function touch(job) {
   }, IDLE_MS);
 }
 
-function drop(job) {
+// clearBadge is false when the caller is about to flash its own badge, so the
+// two calls cannot race each other.
+function drop(job, clearBadge = true) {
   clearTimeout(job.timer);
   jobs.delete(job.id);
   if (busyTab === job.tabId) busyTab = null;
-  chrome.action.setBadgeText({ tabId: job.tabId, text: "" }).catch(() => {});
+  if (clearBadge) chrome.action.setBadgeText({ tabId: job.tabId, text: "" }).catch(() => {});
+}
+
+// Crop the snapshot to the dragged rectangle. This happens here, on the
+// extension's own origin, rather than on a page canvas that Brave's
+// fingerprint protection may perturb.
+async function cropPng(job, meta) {
+  const src = job.strips[0];
+  if (!src) throw new Error("expired");
+  const bm = await createImageBitmap(await (await fetch(src)).blob());
+  const { rect, vw } = meta;
+  const scale = bm.width / vw;
+  const sx = Math.round(rect.x * scale), sy = Math.round(rect.y * scale);
+  const sw = Math.max(1, Math.min(bm.width - sx, Math.round((rect.x + rect.w) * scale) - sx));
+  const sh = Math.max(1, Math.min(bm.height - sy, Math.round((rect.y + rect.h) * scale) - sy));
+  const canvas = new OffscreenCanvas(sw, sh);
+  canvas.getContext("2d").drawImage(bm, sx, sy, sw, sh, 0, 0, sw, sh);
+  bm.close();
+  return canvas.convertToBlob({ type: "image/png" });
+}
+
+// Service workers have no FileReader, so base64 by hand, in chunks that will
+// not overflow the argument list.
+async function toDataUrl(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+  return `data:image/png;base64,${btoa(bin)}`;
+}
+
+async function saveNow(tabId, dataUrl) {
+  await chrome.downloads.download({
+    url: dataUrl,
+    filename: `coffeeshot-${timestamp()}.png`,
+    saveAs: false,
+    conflictAction: "uniquify",
+  });
+  flash(tabId, "OK", "#2e7d32");
 }
 
 // One capture at a time. An idle picker in another tab gives way; a running
@@ -265,21 +304,27 @@ async function handle(msg) {
       job.meta = msg.meta;
       open(job);
       return { ok: true };
-    case "save": {
+    case "save-visible": {
       // "Save now" from the picker: the snapshot is already in hand, so this
       // is 1.0's path with no result tab.
       const dataUrl = job.strips[0];
-      clearTimeout(job.timer);
-      jobs.delete(job.id);
-      if (busyTab === job.tabId) busyTab = null;
-      if (!dataUrl) return { ok: false, error: "expired" };
-      await chrome.downloads.download({
-        url: dataUrl,
-        filename: `coffeeshot-${timestamp()}.png`,
-        saveAs: false,
-        conflictAction: "uniquify",
-      });
-      flash(job.tabId, "OK", "#2e7d32");
+      const tabId = job.tabId;
+      if (!dataUrl) { drop(job); return { ok: false, error: "expired" }; }
+      drop(job, false);
+      await saveNow(tabId, dataUrl);
+      return { ok: true };
+    }
+    case "crop": {
+      // The page asked for the selection so it can put it on the clipboard.
+      const dataUrl = await toDataUrl(await cropPng(job, msg.meta));
+      touch(job);
+      return { ok: true, dataUrl };
+    }
+    case "save-area": {
+      const dataUrl = await toDataUrl(await cropPng(job, msg.meta));
+      const tabId = job.tabId;
+      drop(job, false);
+      await saveNow(tabId, dataUrl);
       return { ok: true };
     }
     case "full-start":

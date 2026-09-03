@@ -185,6 +185,15 @@ $("#undo").addEventListener("click", () => { ops.pop(); redraw(); });
 
 // ---- output ---------------------------------------------------------------
 
+// This tab exists to mark the shot up. Once it has been copied or saved,
+// its job is done, so it gets out of the way.
+function closeSoon() {
+  setTimeout(async () => {
+    const tab = await chrome.tabs.getCurrent().catch(() => null);
+    if (tab) chrome.tabs.remove(tab.id).catch(() => {});
+  }, 900);
+}
+
 function exportBlob() {
   const c = document.createElement("canvas");
   c.width = base.width; c.height = base.height;
@@ -200,7 +209,7 @@ function copy() {
   if (!ready) return;
   status("Copying…");
   navigator.clipboard.write([new ClipboardItem({ "image/png": exportBlob() })]).then(
-    () => status("Copied to clipboard."),
+    () => { status("Copied to clipboard."); closeSoon(); },
     (err) => status(`Copy failed (${err.name}). Click Copy again, or use Save.`)
   );
 }
@@ -224,6 +233,7 @@ async function save() {
       const name = item && item.filename ? item.filename.split(/[\\/]/).pop() : filename;
       status(`Saved as ${name}`);
       done();
+      closeSoon();
     } else if (d.state.current === "interrupted") {
       status(`Brave did not save the file (${(d.error && d.error.current) || "interrupted"}).`);
       done();

@@ -8,7 +8,9 @@
   const S = (window.__coffeeshot = { close: null });
 
   const LOST = "CoffeeShot lost the capture. Click the cup again.";
-  const KEY_ACTION = { f: "full", v: "visible", s: "save" };   // pill buttons and their keys
+  const PICK_ACTION = { f: "full", v: "visible", s: "save-visible" };   // pill buttons and their keys
+  const SEL_ACTION = { c: "copy", s: "save", e: "edit" };               // selection toolbar and its keys
+
   const send = (m) => chrome.runtime.sendMessage(m).catch(() => ({ ok: false, error: "lost" }));
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const frames = (n) => new Promise((r) => { const f = () => (n-- > 0 ? requestAnimationFrame(f) : r()); f(); });
@@ -74,11 +76,16 @@
     .dim { position: absolute; inset: 0; background: rgba(0,0,0,.45); }
     .sel { position: absolute; border: 1px solid #fff; box-shadow: 0 0 0 200vmax rgba(0,0,0,.45); }
     .size { position: absolute; background: #222; color: #fff; font: 12px system-ui, sans-serif; padding: 2px 6px; border-radius: 4px; }
-    .pill { position: absolute; left: 50%; top: 16px; transform: translateX(-50%); display: flex; gap: 10px; align-items: center;
-            background: #222; color: #fff; font: 14px system-ui, sans-serif; padding: 8px 14px; border-radius: 999px;
-            box-shadow: 0 4px 16px rgba(0,0,0,.4); cursor: default; white-space: nowrap; }
-    .pill button { all: initial; font: inherit; color: #fff; background: #444; padding: 4px 10px; border-radius: 999px; cursor: pointer; }
-    .pill button:hover { background: #666; }
+    .pill, .bar { position: absolute; display: flex; gap: 8px; align-items: center; background: #222; color: #fff;
+                  font: 14px system-ui, sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,.4); cursor: default; white-space: nowrap; }
+    .pill { left: 50%; top: 16px; transform: translateX(-50%); padding: 8px 14px; border-radius: 999px; }
+    .bar { padding: 6px; border-radius: 8px; }
+    .pill button, .bar button { all: initial; font: 14px system-ui, sans-serif; color: #fff; background: #444; cursor: pointer; }
+    .pill button { padding: 4px 10px; border-radius: 999px; }
+    .bar button { padding: 6px 12px; border-radius: 6px; }
+    .pill button:hover, .bar button:hover { background: #666; }
+    .bar button.primary { background: #1e88e5; }
+    .bar button.primary:hover { background: #1976d2; }
     .pill span { opacity: .7; }
     [hidden] { display: none !important; }
   `;
@@ -86,18 +93,20 @@
   function picker({ id, mode, snapshot }) {
     const { host, root } = mount(PICKER_CSS,
       `<canvas></canvas><div class="dim"></div><div class="sel" hidden></div><div class="size" hidden></div>` +
+      `<div class="bar" hidden><button data-a="copy" class="primary">Copy</button><button data-a="save">Save</button><button data-a="edit">Edit</button></div>` +
       `<div class="pill">Drag to capture an area` +
       (mode === "pick"
         ? `<button data-k="f">Full page (F)</button><button data-k="v">Visible (V)</button><button data-k="s">Save now (S)</button>`
         : ``) +
       `<span>Esc to cancel</span></div>`);
     const canvas = root.querySelector("canvas"), dim = root.querySelector(".dim");
-    const sel = root.querySelector(".sel"), size = root.querySelector(".size"), pill = root.querySelector(".pill");
+    const sel = root.querySelector(".sel"), size = root.querySelector(".size");
+    const pill = root.querySelector(".pill"), bar = root.querySelector(".bar");
     const prevFocus = document.activeElement;
-    let start = null, closed = false;
+    let start = null, selRect = null, closed = false, busy = false;
 
     // Keys go to the focused document, which may be an iframe; take focus so
-    // Esc / F / V reach us, and give it back afterwards.
+    // the shortcuts reach us, and give it back afterwards.
     host.tabIndex = -1;
     host.focus({ preventScroll: true });
 
@@ -116,11 +125,12 @@
     };
     S.close = close;
 
+    // ---- whole-tab choices from the pill ----
     const finish = async (action) => {
       close();
       if (action === "cancel") { send({ type: "cancel", id }); return; }
-      if (action === "save") {
-        const r = await send({ type: "save", id });
+      if (action === "save-visible") {
+        const r = await send({ type: "save-visible", id });
         toast(r.ok ? "Saved to Downloads." : (r.error === "expired" || r.error === "lost" ? LOST : `Save failed: ${r.error}`));
         return;
       }
@@ -129,41 +139,125 @@
       else if (action === "full") fullPage(id);
     };
 
+    // ---- selection choices from the toolbar ----
+    // Copy and Save finish here. Only Edit opens the CoffeeShot tab.
+    const act = (action) => {
+      if (busy || !selRect) return;
+      const meta = { rect: selRect, vw: innerWidth, vh: innerHeight };
+
+      if (action === "edit") {
+        busy = true;
+        close();
+        send({ type: "area", id, meta }).then((r) => { if (!r.ok) toast(LOST); });
+        return;
+      }
+
+      if (action === "save") {
+        busy = true;
+        close();
+        send({ type: "save-area", id, meta }).then((r) => {
+          toast(r.ok ? "Saved to Downloads." : (r.error === "expired" || r.error === "lost" ? LOST : `Save failed: ${r.error}`));
+        });
+        return;
+      }
+
+      // Copy. navigator.clipboard exists only in a secure context, so plain
+      // http:// pages hand the crop to the CoffeeShot tab instead.
+      if (!window.isSecureContext || !navigator.clipboard || !window.ClipboardItem) {
+        busy = true;
+        close();
+        send({ type: "area", id, meta }).then((r) => {
+          toast(r.ok ? "This page cannot copy directly, so it opened in a CoffeeShot tab." : LOST);
+        });
+        return;
+      }
+      busy = true;
+      // write() is called inside the click with the PNG still pending, so the
+      // crop can take as long as it likes without losing the user gesture.
+      const png = (async () => {
+        const r = await send({ type: "crop", id, meta });
+        if (!r.ok || !r.dataUrl) throw new Error(r.error || "expired");
+        return toBlob(r.dataUrl);
+      })();
+      navigator.clipboard.write([new ClipboardItem({ "image/png": png })]).then(
+        () => { close(); toast("Copied to clipboard."); send({ type: "cancel", id }); },
+        () => {
+          close();
+          send({ type: "area", id, meta }).then((r) => {
+            toast(r.ok ? "Brave blocked the copy, so it opened in a CoffeeShot tab." : LOST);
+          });
+        }
+      );
+    };
+
     const onKey = (e) => {
       e.stopImmediatePropagation();
       e.preventDefault();
       if (e.type !== "keydown" || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.key === "Escape") return finish("cancel");
+      if (e.key === "Escape") { if (selRect) reset(); else finish("cancel"); return; }
+      const k = e.key.toLowerCase();
+      if (selRect) {
+        const a = SEL_ACTION[k];
+        if (typeof a === "string") act(a);
+        return;
+      }
       if (mode !== "pick") return;
-      const action = KEY_ACTION[e.key.toLowerCase()];
-      if (typeof action === "string") finish(action);
+      const a = PICK_ACTION[k];
+      if (typeof a === "string") finish(a);
     };
     for (const t of ["keydown", "keyup", "keypress"]) window.addEventListener(t, onKey, true);
 
-    pill.addEventListener("mousedown", (e) => e.stopPropagation());
+    for (const el of [pill, bar]) el.addEventListener("mousedown", (e) => e.stopPropagation());
     pill.querySelectorAll("button").forEach((b) => b.addEventListener("click", (e) => {
       e.stopPropagation();
-      finish(KEY_ACTION[b.dataset.k]);
+      finish(PICK_ACTION[b.dataset.k]);
+    }));
+    bar.querySelectorAll("button").forEach((b) => b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      act(b.dataset.a);
     }));
     for (const t of ["wheel", "contextmenu", "dblclick"]) host.addEventListener(t, (e) => { e.preventDefault(); e.stopPropagation(); });
 
     root.addEventListener("mousedown", (e) => {
-      if (e.button !== 0) return;
+      if (e.button !== 0 || busy) return;
       e.preventDefault(); e.stopPropagation();
+      selRect = null;
+      bar.hidden = true;
+      pill.hidden = false;
       start = [e.clientX, e.clientY];
       dim.hidden = true; sel.hidden = false; size.hidden = false;
       place(e);
     });
     root.addEventListener("mousemove", (e) => { if (start) place(e); });
-    root.addEventListener("mouseup", async (e) => {
+    root.addEventListener("mouseup", (e) => {
       if (!start || e.button !== 0) return;
       const r = rect(e);
       start = null;
-      if (r.w < 4 || r.h < 4) { dim.hidden = false; sel.hidden = true; size.hidden = true; return; }
-      close();
-      const reply = await send({ type: "area", id, meta: { rect: r, vw: innerWidth, vh: innerHeight } });
-      if (!reply.ok) toast(LOST);
+      if (r.w < 4 || r.h < 4) { reset(); return; }
+      selRect = r;
+      pill.hidden = true;
+      showBar(r);
     });
+
+    function reset() {
+      selRect = null;
+      dim.hidden = false; sel.hidden = true; size.hidden = true; bar.hidden = true;
+      pill.hidden = false;
+    }
+
+    // The toolbar sits under the selection's bottom-right corner, its right
+    // edge flush with the selection's, flipping above or clamping inward when
+    // there is no room.
+    function showBar(r) {
+      bar.hidden = false;
+      const bw = bar.offsetWidth, bh = bar.offsetHeight;
+      let y = r.y + r.h + 8;
+      if (y + bh > innerHeight - 4) y = r.y - bh - 8;
+      if (y < 4) y = Math.max(4, Math.min(innerHeight - bh - 4, r.y + r.h + 8));
+      const x = Math.max(4, Math.min(r.x + r.w - bw, innerWidth - bw - 4));
+      bar.style.left = x + "px";
+      bar.style.top = y + "px";
+    }
 
     function rect(e) {
       const x = Math.max(0, Math.min(start[0], e.clientX)), y = Math.max(0, Math.min(start[1], e.clientY));
@@ -175,7 +269,7 @@
       sel.style.left = r.x + "px"; sel.style.top = r.y + "px"; sel.style.width = r.w + "px"; sel.style.height = r.h + "px";
       size.textContent = `${r.w} × ${r.h}`;
       size.style.left = r.x + "px";
-      size.style.top = (r.y + r.h + 30 > innerHeight ? r.y - 24 : r.y + r.h + 6) + "px";
+      size.style.top = (r.y - 24 < 4 ? r.y + 4 : r.y - 24) + "px";
     }
 
     // The frozen frame. It covers the whole tab including the scrollbar, so it

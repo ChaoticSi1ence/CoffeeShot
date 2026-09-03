@@ -8,17 +8,22 @@ no network access.
 
 Click the cup. The page freezes under a picker:
 
-- **Drag** a rectangle to capture that area.
+- **Drag** a rectangle. A small toolbar appears under its bottom-right corner:
+  **Copy** puts the PNG on the clipboard, **Save** writes it to Downloads, and
+  **Edit** opens it in a CoffeeShot tab for markup. Copy and Save finish on the
+  page itself, with no tab in between. The keys are **C**, **S** and **E**, and
+  **Esc** clears the selection so you can drag again.
 - **F** captures the full page. The page scrolls itself, about two screens a
   second, and the cup counts the screens.
 - **V** captures the visible tab.
-- **S** saves the visible tab to Downloads right away, with no tab in between.
+- **S** saves the visible tab to Downloads right away.
 - **Esc** cancels.
 
-Every capture opens a CoffeeShot tab next to the page. Draw on it with the
-pen, rectangle or arrow in four colours (Ctrl+Z undoes), then **Copy** puts
-the PNG on the clipboard and **Save** (Enter or Ctrl+S) writes
-`coffeeshot-YYYY-MM-DD_HH-MM-SS.png` to Downloads.
+Edit, full page and visible tab open a CoffeeShot tab next to the page. Draw on
+it with the pen, rectangle or arrow in four colours (Ctrl+Z undoes), then
+**Copy** puts the PNG on the clipboard and **Save** (Enter or Ctrl+S) writes
+`coffeeshot-YYYY-MM-DD_HH-MM-SS.png` to Downloads. The tab closes itself once
+you have copied or saved.
 
 Right-click a page and you get one **CoffeeShot** entry, not a submenu, which
 opens the same picker. Right-click the cup itself for the three captures
@@ -65,6 +70,9 @@ from the Chrome Web Store. A self-signed `.crx` dropped on
 - `file://` pages need "Allow access to file URLs" for CoffeeShot on
   `brave://extensions`; otherwise Brave refuses the capture and the result tab
   tells you.
+- Copy straight from the selection needs a secure page. On a plain `http://`
+  site the browser gives no clipboard to the extension, so Copy opens the
+  CoffeeShot tab and you press Copy there instead.
 - Full page hides fixed and pinned sticky elements after the first screen so
   headers appear once, stops at 40 screens, and is scaled so no side exceeds
   16,384 px (a memory budget; Blink's own limit is 65,535). Pages that scroll
