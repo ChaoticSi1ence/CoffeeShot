@@ -8,6 +8,7 @@
   const S = (window.__coffeeshot = { close: null });
 
   const LOST = "CoffeeShot lost the capture. Click the cup again.";
+  const KEY_ACTION = { f: "full", v: "visible", s: "save" };   // pill buttons and their keys
   const send = (m) => chrome.runtime.sendMessage(m).catch(() => ({ ok: false, error: "lost" }));
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const frames = (n) => new Promise((r) => { const f = () => (n-- > 0 ? requestAnimationFrame(f) : r()); f(); });
@@ -86,7 +87,9 @@
     const { host, root } = mount(PICKER_CSS,
       `<canvas></canvas><div class="dim"></div><div class="sel" hidden></div><div class="size" hidden></div>` +
       `<div class="pill">Drag to capture an area` +
-      (mode === "pick" ? `<button data-k="f">Full page (F)</button><button data-k="v">Visible (V)</button>` : ``) +
+      (mode === "pick"
+        ? `<button data-k="f">Full page (F)</button><button data-k="v">Visible (V)</button><button data-k="s">Save now (S)</button>`
+        : ``) +
       `<span>Esc to cancel</span></div>`);
     const canvas = root.querySelector("canvas"), dim = root.querySelector(".dim");
     const sel = root.querySelector(".sel"), size = root.querySelector(".size"), pill = root.querySelector(".pill");
@@ -116,6 +119,11 @@
     const finish = async (action) => {
       close();
       if (action === "cancel") { send({ type: "cancel", id }); return; }
+      if (action === "save") {
+        const r = await send({ type: "save", id });
+        toast(r.ok ? "Saved to Downloads." : (r.error === "expired" || r.error === "lost" ? LOST : `Save failed: ${r.error}`));
+        return;
+      }
       const r = await send({ type: action === "full" ? "full-start" : "visible", id });
       if (!r.ok) toast(LOST);
       else if (action === "full") fullPage(id);
@@ -125,16 +133,17 @@
       e.stopImmediatePropagation();
       e.preventDefault();
       if (e.type !== "keydown" || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.key === "Escape") finish("cancel");
-      else if (mode === "pick" && (e.key === "f" || e.key === "F")) finish("full");
-      else if (mode === "pick" && (e.key === "v" || e.key === "V")) finish("visible");
+      if (e.key === "Escape") return finish("cancel");
+      if (mode !== "pick") return;
+      const action = KEY_ACTION[e.key.toLowerCase()];
+      if (typeof action === "string") finish(action);
     };
     for (const t of ["keydown", "keyup", "keypress"]) window.addEventListener(t, onKey, true);
 
     pill.addEventListener("mousedown", (e) => e.stopPropagation());
     pill.querySelectorAll("button").forEach((b) => b.addEventListener("click", (e) => {
       e.stopPropagation();
-      finish(b.dataset.k === "f" ? "full" : "visible");
+      finish(KEY_ACTION[b.dataset.k]);
     }));
     for (const t of ["wheel", "contextmenu", "dblclick"]) host.addEventListener(t, (e) => { e.preventDefault(); e.stopPropagation(); });
 

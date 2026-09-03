@@ -12,6 +12,7 @@ Click the cup. The page freezes under a picker:
 - **F** captures the full page. The page scrolls itself, about two screens a
   second, and the cup counts the screens.
 - **V** captures the visible tab.
+- **S** saves the visible tab to Downloads right away, with no tab in between.
 - **Esc** cancels.
 
 Every capture opens a CoffeeShot tab next to the page. Draw on it with the
@@ -19,9 +20,13 @@ pen, rectangle or arrow in four colours (Ctrl+Z undoes), then **Copy** puts
 the PNG on the clipboard and **Save** (Enter or Ctrl+S) writes
 `coffeeshot-YYYY-MM-DD_HH-MM-SS.png` to Downloads.
 
-Right-click a page, or the cup itself, for the same three captures without
-the picker, plus **Save visible tab now**: straight to Downloads, no tab, a
-green OK on the cup. That is what 1.0 did on every click.
+Right-click a page and you get one **CoffeeShot** entry, not a submenu, which
+opens the same picker. Right-click the cup itself for the three captures
+without the picker, plus **Save visible tab now**: straight to Downloads, no
+tab, a green OK on the cup. That is what 1.0 did on every click.
+
+(Chrome collapses two or more of an extension's items into a submenu and has
+no way to opt out, so the page menu keeps a single entry on purpose.)
 
 No keys are bound by default, because Brave uses Ctrl+Shift+S for its own
 screenshot tool. Set yours at `brave://extensions/shortcuts`; Alt+Shift+S and

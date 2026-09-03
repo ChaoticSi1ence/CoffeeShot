@@ -14,7 +14,12 @@ let busyTab = null;         // one capture at a time; the capture quota is per e
 let lastShot = 0;
 let nextId = 1;
 
-const MENU = [
+// The page menu gets exactly one item: Chrome collapses two or more of an
+// extension's items into a submenu and offers no way to opt out, and the
+// picker is a better place to choose a mode anyway. The cup's own menu is a
+// separate surface, so the four modes sit there directly.
+const PAGE_CONTEXTS = ["page", "selection", "link", "image", "video", "audio", "editable", "frame"];
+const ACTION_MENU = [
   ["area", "Capture area"],
   ["full", "Capture full page"],
   ["visible", "Capture visible tab"],
@@ -23,8 +28,9 @@ const MENU = [
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
-    for (const [id, title] of MENU) {
-      chrome.contextMenus.create({ id, title, contexts: ["all"] });
+    chrome.contextMenus.create({ id: "pick", title: "CoffeeShot", contexts: PAGE_CONTEXTS });
+    for (const [id, title] of ACTION_MENU) {
+      chrome.contextMenus.create({ id, title, contexts: ["action"] });
     }
   });
 });
@@ -259,6 +265,23 @@ async function handle(msg) {
       job.meta = msg.meta;
       open(job);
       return { ok: true };
+    case "save": {
+      // "Save now" from the picker: the snapshot is already in hand, so this
+      // is 1.0's path with no result tab.
+      const dataUrl = job.strips[0];
+      clearTimeout(job.timer);
+      jobs.delete(job.id);
+      if (busyTab === job.tabId) busyTab = null;
+      if (!dataUrl) return { ok: false, error: "expired" };
+      await chrome.downloads.download({
+        url: dataUrl,
+        filename: `coffeeshot-${timestamp()}.png`,
+        saveAs: false,
+        conflictAction: "uniquify",
+      });
+      flash(job.tabId, "OK", "#2e7d32");
+      return { ok: true };
+    }
     case "full-start":
       job.mode = "full";
       job.strips = [];
