@@ -88,21 +88,25 @@
     /* Four plain rectangles dim everything outside the selection. One huge
        box-shadow would repaint the entire window on every mouse move. */
     .masks > div { position: absolute; background: rgba(0,0,0,.45); }
+    .masks > div:nth-child(-n+2) { left: 0; width: 100%; }   /* above and below span the width */
+    .masks > div:nth-child(1) { top: 0; }
     .sel { position: absolute; border: 1px solid #fff; }
     .size { position: absolute; background: #222; color: #fff; font: 12px system-ui, sans-serif; padding: 2px 6px;
             border-radius: 4px; animation: cs-fade .1s ease-out both; }
     .pill, .bar { position: absolute; display: flex; gap: 8px; align-items: center; background: #222; color: #fff;
                   font: 14px system-ui, sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,.4); cursor: default; white-space: nowrap; }
-    .pill { left: 50%; top: 16px; transform: translateX(-50%); padding: 8px 14px; border-radius: 999px;
+    .pill { left: 50%; top: 16px; transform: translateX(-50%); padding: 6px 16px;
             animation: cs-drop .2s cubic-bezier(.2,.8,.3,1) both; }
-    .bar { padding: 6px; border-radius: 8px; transform-origin: 100% 0;
+    .bar { padding: 6px; transform-origin: 100% 0;
            animation: cs-pop .16s cubic-bezier(.2,.85,.3,1.15) both; }
+    /* One shape for every control in the extension: a capsule. */
+    .pill, .bar { border-radius: 999px; }
     .pill button, .bar button { all: initial; font: 14px system-ui, sans-serif; color: #fff; background: #444;
-                                cursor: pointer; transition: background .12s ease, transform .12s ease; }
-    .pill button { padding: 4px 10px; border-radius: 999px; }
-    .bar button { padding: 6px 12px; border-radius: 6px; }
+                                cursor: pointer; padding: 6px 12px; border-radius: 999px;
+                                transition: background .12s ease, transform .12s ease; }
     .pill button:hover, .bar button:hover { background: #666; }
-    .bar button:active { transform: scale(.96); }
+    .pill button:active, .bar button:active { transform: scale(.96); }
+    .pill button:focus-visible, .bar button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
     .bar button.primary { background: #1e88e5; }
     .bar button.primary:hover { background: #1976d2; }
     .pill span { opacity: .7; }
@@ -299,8 +303,11 @@
     function place(e) {
       const r = rect(e);
       sel.style.left = r.x + "px"; sel.style.top = r.y + "px"; sel.style.width = r.w + "px"; sel.style.height = r.h + "px";
-      box(mask[0], 0, 0, innerWidth, r.y);                                   // above
-      box(mask[1], 0, r.y + r.h, innerWidth, innerHeight - r.y - r.h);       // below
+      // The full-width strips get their left and width from CSS, so only the
+      // edges that actually move are written.
+      mask[0].style.height = r.y + "px";                                     // above
+      mask[1].style.top = (r.y + r.h) + "px";                                // below
+      mask[1].style.height = Math.max(0, innerHeight - r.y - r.h) + "px";
       box(mask[2], 0, r.y, r.x, r.h);                                        // left
       box(mask[3], r.x + r.w, r.y, innerWidth - r.x - r.w, r.h);             // right
       size.textContent = `${r.w} × ${r.h}`;

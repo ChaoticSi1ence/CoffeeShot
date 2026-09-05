@@ -9,6 +9,8 @@ const MAX_SIDE = 16384;   // memory and encode-time budget; Blink's own side lim
 
 let ready = false, saving = false, ops = [], cur = null, tool = "pen", color = "#e53935", stroke = 3;
 let live = null, frame = 0;   // bounds of the shape being dragged, and its queued frame
+let inkSized = false;         // the ink layer is only allocated once you draw
+let inkRect = null;           // cached canvas rect, so pointer moves read no layout
 
 const status = (t) => { $("#status").textContent = t; };
 const ask = (msg) => chrome.runtime.sendMessage({ id, ...msg });
@@ -24,9 +26,19 @@ function disableAll() {
   document.querySelectorAll("button").forEach((b) => (b.disabled = true));
 }
 
+// The ink layer matches the capture, which for a full page is tens of
+// millions of pixels. Most captures are copied or saved without a single
+// stroke, so its buffer is not allocated until the first one.
+function sizeInk() {
+  if (inkSized) return;
+  ink.width = base.width;
+  ink.height = base.height;
+  inkSized = true;
+}
+
 function setSize(w, h) {
-  base.width = ink.width = w;
-  base.height = ink.height = h;
+  base.width = w;
+  base.height = h;
   $("#wrap").style.width = Math.round(w / devicePixelRatio) + "px";
   $("#wrap").classList.add("ready");
   stroke = Math.max(3, Math.round(w / 600));
@@ -107,10 +119,13 @@ async function buildFull(job) {
   };
   if (m.clipTop > 0) draw(first, 0, m.clipTop, 0);
   if (tail > 0) draw(first, m.clipTop + m.clipH, m.vh, m.clipTop + covered);
-  let prevBottom = -Infinity;
+  // Each screen is requested and decoded while the previous one is still being
+  // drawn, so the transfer and the painting overlap instead of taking turns.
+  let prevBottom = -Infinity, pending = null;
   for (let i = 0; i < n; i++) {
     status(`Stitching ${i + 1} of ${n}…`);
-    const bm = i === 0 ? first : await strip(i);
+    const bm = i === 0 ? first : await pending;
+    pending = i + 1 < n ? strip(i + 1) : null;
     // Rows already drawn keep what an earlier strip showed there (the first
     // strip is the one with the fixed header), so only new rows are painted.
     const skip = Math.max(0, prevBottom - ys[i]);
@@ -128,7 +143,8 @@ function drawOp(ctx, op) {
   const p = op.pts;
   if (op.tool === "pen") {
     ctx.beginPath();
-    p.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.moveTo(p[0][0], p[0][1]);
+    for (let i = 1; i < p.length; i++) ctx.lineTo(p[i][0], p[i][1]);
     ctx.stroke();
   } else if (op.tool === "rect") {
     const [[x0, y0], [x1, y1]] = p;
@@ -171,14 +187,19 @@ function bounds(op) {
 
 const union = (a, b) => [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])];
 
-// Clear one rectangle and put back the committed strokes that cross it.
-function repaint([x0, y0, x1, y1]) {
+// Clear one rectangle and put back only the committed strokes that cross it.
+function repaint(box) {
+  const [x0, y0, x1, y1] = box;
   ictx.save();
   ictx.beginPath();
   ictx.rect(x0, y0, x1 - x0, y1 - y0);
   ictx.clip();
   ictx.clearRect(x0, y0, x1 - x0, y1 - y0);
-  for (const op of ops) drawOp(ictx, op);
+  for (const op of ops) {
+    const b = op.box;
+    if (b[2] < x0 || b[0] > x1 || b[3] < y0 || b[1] > y1) continue;
+    drawOp(ictx, op);
+  }
   ictx.restore();
 }
 
@@ -205,14 +226,20 @@ function drawSegment(op) {
   ictx.stroke();
 }
 
+// Measured once per stroke rather than on every move, since reading it forces
+// the browser to settle layout. Scrolling or resizing drops the cached value.
 function pt(e) {
-  const r = ink.getBoundingClientRect();
-  return [(e.clientX - r.left) * ink.width / r.width, (e.clientY - r.top) * ink.height / r.height];
+  if (!inkRect) inkRect = ink.getBoundingClientRect();
+  return [(e.clientX - inkRect.left) * ink.width / inkRect.width, (e.clientY - inkRect.top) * ink.height / inkRect.height];
 }
+const dropRect = () => { inkRect = null; };
+addEventListener("scroll", dropRect, { passive: true, capture: true });
+addEventListener("resize", dropRect, { passive: true });
 
 function commit() {
   if (!cur) return;
   if (cur.tool !== "pen") paintLive();   // a queued frame may not have run yet
+  cur.box = bounds(cur);
   ops.push(cur);
   cur = null;
   live = null;
@@ -220,6 +247,7 @@ function commit() {
 
 ink.addEventListener("pointerdown", (e) => {
   if (!ready || e.button !== 0 || cur) return;
+  sizeInk();
   ink.setPointerCapture(e.pointerId);
   const p = pt(e);
   cur = { tool, color, width: stroke, pts: [p, p] };
@@ -267,13 +295,18 @@ function closeSoon() {
   }, 900);
 }
 
+// With no markup there is nothing to merge, so the capture is encoded straight
+// from its own canvas instead of being copied into a second full-size one.
 function exportBlob() {
-  const c = document.createElement("canvas");
-  c.width = base.width; c.height = base.height;
-  const ctx = c.getContext("2d");
-  ctx.drawImage(base, 0, 0);
-  ctx.drawImage(ink, 0, 0);
-  return new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error("encode failed"))), "image/png"));
+  let src = base;
+  if (inkSized) {
+    src = document.createElement("canvas");
+    src.width = base.width; src.height = base.height;
+    const ctx = src.getContext("2d");
+    ctx.drawImage(base, 0, 0);
+    ctx.drawImage(ink, 0, 0);
+  }
+  return new Promise((resolve, reject) => src.toBlob((b) => (b ? resolve(b) : reject(new Error("encode failed"))), "image/png"));
 }
 
 // The clipboard write must start inside the click. The blob is passed as a
