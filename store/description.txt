@@ -1,0 +1,80 @@
+Screenshot the visible tab, a dragged area, or the whole scrolling page. Mark it up if you want to. Then copy it to the clipboard or save it as a PNG.
+
+CoffeeShot is deliberately small. There is no account, no sign-in, no network access of any kind, and nothing it captures ever leaves your computer. The whole extension is a handful of plain files you can read in a few minutes, and the source is public.
+
+
+HOW IT WORKS
+
+Click the cup in the toolbar. The page freezes under a picker, so anything moving on screen stays exactly where it was while you decide what to take.
+
+From there:
+
+- Drag a rectangle to capture that area.
+- Press F to capture the full page. It scrolls the page for you and stitches the screens together.
+- Press V to capture just the visible tab.
+- Press S to save the visible tab straight to your downloads folder, with nothing else in the way.
+- Press Esc to cancel.
+
+Once you have dragged a rectangle, a small toolbar appears at its corner with three choices:
+
+- Copy puts the PNG on your clipboard, ready to paste into a chat, a document, or an image editor.
+- Save writes it to your downloads folder.
+- Edit opens it in a CoffeeShot tab so you can draw on it first.
+
+Copy and Save finish right there on the page. No extra tab opens and nothing interrupts you. The keys are C, S and E if you would rather not reach for the mouse, and Esc clears the selection so you can drag a different one.
+
+
+MARKING UP A SHOT
+
+Choosing Edit, or capturing the full page or the visible tab, opens a CoffeeShot tab beside the page you were on.
+
+Draw on it with a pen, a rectangle, or an arrow. Four colours are ready to go and there is a colour picker if you want a different one, including an eyedropper to match something already in the image. Ctrl+Z undoes. The tool keys are P, R and A.
+
+When you are done, Copy puts the finished image on the clipboard and Save writes it to your downloads folder as coffeeshot-2026-09-05_14-05-33.png, or whatever the date and time happen to be. The tab then closes itself, because its job is finished.
+
+
+OTHER WAYS IN
+
+Right-click any page and you get a single CoffeeShot entry, not a nest of submenus. It opens the same picker.
+
+Right-click the cup itself for the three captures without the picker, plus "Save visible tab now" for a one-click screenshot straight to your downloads folder.
+
+No keyboard shortcut is set by default, because guessing at a combination you already use for something else is rude. Two are available to assign on the extensions shortcuts page: one opens the picker, the other saves the visible tab immediately. Brave users who want Ctrl+Shift+S will need to clear Brave's own screenshot binding first, since Brave claims that combination for its built-in tool.
+
+Everything that appears eases in rather than snapping into place, and if you have reduced motion turned on in your system settings, none of that animation runs.
+
+
+WHAT IT ASKS FOR, AND WHY
+
+Four permissions, each doing exactly one job:
+
+- activeTab: read the tab you invoked CoffeeShot on, and only while you invoke it. This is what makes the screenshot possible.
+- scripting: put the area picker and the scrolling helper into that one tab. Nothing is injected into any other tab, and nothing runs until you click.
+- contextMenus: add the right-click entries.
+- downloads: save the PNG to your downloads folder.
+
+There are no host permissions, so CoffeeShot has no standing access to any website. It cannot read a page you have not pointed it at. It makes no network requests, contains no analytics, no tracking, and no remote code. Nothing is collected, nothing is transmitted, and nothing is stored anywhere except the file you asked for and the clipboard you asked to fill.
+
+
+LIMITS, STATED PLAINLY
+
+Some of these are the browser's rules rather than choices, but you should know about them before you install rather than after.
+
+Browser pages such as chrome:// and brave://, the extension store, other extensions' pages, and the built-in PDF viewer will only give you the visible tab. The picker and full-page capture cannot run there, and CoffeeShot tells you so instead of failing quietly.
+
+Local files opened from disk need "Allow access to file URLs" switched on for CoffeeShot on the extensions page. Without it the browser refuses the capture outright.
+
+Copying straight from a selection needs a secure page. On a plain http:// site the browser gives extensions no clipboard at all, so Copy opens the CoffeeShot tab instead and you press Copy there.
+
+Full-page capture hides pinned headers and floating bars after the first screen so they appear once rather than repeating down the image. It stops at forty screens, and very long pages are scaled down so that neither side exceeds 16,384 pixels, which keeps the memory in check. Pages that scroll inside a panel rather than the page itself are captured from the panel under the middle of your window. Deeply nested scrolling areas and pages that load content as you scroll can still come out incomplete, and no screenshot tool handles those perfectly.
+
+Only one capture runs at a time.
+
+If your browser is set to ask where to save each file, you will get the usual save dialog.
+
+
+OPEN SOURCE
+
+The code is public at github.com/ChaoticSi1ence/CoffeeShot. It is plain JavaScript, HTML and CSS with no build step and no frameworks, so you can read the whole thing and see exactly what it does with your screenshots, which is: nothing except what you asked.
+
+Issues and suggestions are welcome there.
