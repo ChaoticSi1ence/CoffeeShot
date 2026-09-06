@@ -1,0 +1,55 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>CoffeeShot 1280×3400</title>
+  <link rel="stylesheet" href="result.css">
+  <style>
+    html, body { width: 1280px; height: 800px; overflow: hidden; }
+    * { animation: none !important; transition: none !important; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="tools">
+      <button data-tool="pen" class="on" title="Pen (P)">Pen</button>
+      <button data-tool="rect" title="Rectangle (R)">Rectangle</button>
+      <button data-tool="arrow" title="Arrow (A)">Arrow</button>
+      <span class="colors">
+        <button data-color="#e53935" class="on" style="background:#e53935" title="Red"></button>
+        <button data-color="#fdd835" style="background:#fdd835" title="Yellow"></button>
+        <button data-color="#1e88e5" style="background:#1e88e5" title="Blue"></button>
+        <button data-color="#111111" style="background:#111111" title="Black"></button>
+        <input type="color" id="custom" value="#00c853" title="Pick any colour">
+      </span>
+      <button id="undo" title="Undo (Ctrl+Z)">Undo</button>
+    </div>
+    <div class="actions">
+      <span id="status"></span>
+      <button id="copy" title="Copy to clipboard (Ctrl+C)">Copy</button>
+      <button id="save" class="primary" title="Save to Downloads (Enter or Ctrl+S)">Save</button>
+    </div>
+  </header>
+  <p id="note" hidden></p>
+  <main id="stage">
+    <div id="wrap">
+      <canvas id="base"></canvas>
+      <canvas id="ink"></canvas>
+    </div>
+  </main>
+  <script>
+    // A stitched full page, shown the way the tab shows one that is taller
+    // than the window: scaled down to fit the height.
+    const base = document.getElementById("base"), wrap = document.getElementById("wrap");
+    const img = new Image();
+    img.onload = () => {
+      base.width = img.width; base.height = img.height;
+      base.getContext("2d").drawImage(img, 0, 0);
+      const room = innerHeight - document.querySelector("header").offsetHeight - 24;
+      wrap.style.width = "560px";
+      wrap.classList.add("ready");
+    };
+    img.src = "page-tall.png";
+  </script>
+</body>
+</html>

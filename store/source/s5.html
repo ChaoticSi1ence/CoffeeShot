@@ -1,0 +1,21 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="slide.css">
+<style>
+  .rows { position: absolute; left: 74px; top: 300px; width: 760px; }
+  .row { display: flex; align-items: baseline; gap: 18px; padding: 18px 0; border-top: 1px solid rgba(255,255,255,.14); }
+  .row:last-child { border-bottom: 1px solid rgba(255,255,255,.14); }
+  .row code { font: 600 22px/1 Consolas, "Cascadia Mono", monospace; color: #ffb38a; min-width: 200px; }
+  .row span { font-size: 22px; color: rgba(255,255,255,.85); }
+  .big { position: absolute; right: 96px; top: 300px; width: 300px; height: 300px; }
+  .none { position: absolute; left: 74px; top: 660px; font-size: 22px; color: rgba(255,255,255,.7); }
+</style></head>
+<body><div class="wrap">
+  <div class="text"><h1>Nothing leaves your browser.</h1><p class="sub">Four permissions, each doing one job. No host permissions, no network, no analytics, no account.</p></div>
+  <div class="rows">
+    <div class="row"><code>activeTab</code><span>the tab you clicked on, only while you click</span></div>
+    <div class="row"><code>scripting</code><span>puts the picker into that one tab, nothing else</span></div>
+    <div class="row"><code>contextMenus</code><span>the right-click entries</span></div>
+    <div class="row"><code>downloads</code><span>saves the PNG to your Downloads folder</span></div>
+  </div>
+  <img class="big" src="tile-icon.png" alt="">
+  <div class="none">Open source, plain files, no build step. Read the whole thing on GitHub.</div>
+</div></body></html>
