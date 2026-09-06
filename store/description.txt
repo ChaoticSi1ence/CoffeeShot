@@ -60,7 +60,7 @@ LIMITS, STATED PLAINLY
 
 Some of these are the browser's rules rather than choices, but you should know about them before you install rather than after.
 
-Browser pages such as chrome:// and brave://, the extension store, other extensions' pages, and the built-in PDF viewer will only give you the visible tab. The picker and full-page capture cannot run there, and CoffeeShot tells you so instead of failing quietly.
+Browser pages such as chrome:// and brave://, the extension store, other extensions' pages, and the built-in PDF viewer do not allow the picker to run on the page itself. On those, CoffeeShot opens the visible tab in its own tab with a Pick area tool ready, so you can still drag out the part you want and then copy or save it. Full-page capture is not possible there, because it needs to scroll the page and that is exactly what the browser forbids, and CoffeeShot says so instead of failing quietly.
 
 Local files opened from disk need "Allow access to file URLs" switched on for CoffeeShot on the extensions page. Without it the browser refuses the capture outright.
 
