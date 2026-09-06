@@ -7,6 +7,11 @@ no network access.
 It is plain Manifest V3 with no Brave-specific APIs, so it should run in Chrome
 and other Chromium browsers too. Brave is the only one it has been tested in.
 
+**Install it from the
+[Chrome Web Store](https://chromewebstore.google.com/detail/coffeeshot/aphapihnmjfmmbdoknmlgpmnakncpagh).**
+That works in Brave as well as Chrome, needs no developer mode, and updates
+on its own.
+
 ## Use
 
 Click the cup. The page freezes under a picker:
@@ -48,6 +53,17 @@ The overlay, the toolbars and the markup tab ease in rather than appearing
 cold. With "reduce motion" turned on in Windows, none of that animation runs.
 
 ## Install
+
+From the Chrome Web Store, which is the easy way:
+
+1. Open the
+   [CoffeeShot listing](https://chromewebstore.google.com/detail/coffeeshot/aphapihnmjfmmbdoknmlgpmnakncpagh)
+   in Brave or Chrome and click **Add to Chrome**. Brave shows the same button.
+2. Pin it: click the puzzle-piece icon in the toolbar, then the pin next to
+   "CoffeeShot".
+
+The store copy updates itself when a new version is published. The steps
+below are for running the source directly, or a release ahead of the store.
 
 From a release:
 
