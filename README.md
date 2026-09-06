@@ -73,9 +73,11 @@ from the Chrome Web Store. A self-signed `.crx` dropped on
 - One capture at a time. Clicking the cup while a picker is waiting in another
   tab closes that picker and starts here; while a full-page capture is
   running you get a "..." badge instead.
-- `brave://` pages, the Web Store and other extensions' pages do not allow
-  the picker or full page, and the PDF viewer cannot be scrolled for you. On
-  those you get the visible tab with a note saying so.
+- `brave://` pages, the Web Store, other extensions' pages and the PDF viewer
+  do not allow the picker or full page. On those the visible tab opens in the
+  CoffeeShot tab with a **Pick area** tool (X) already selected: drag the part
+  you want, then Copy or Save as usual. Ctrl+Z puts the whole tab back. That
+  tool only appears on pages that refused the picker.
 - `file://` pages need "Allow access to file URLs" for CoffeeShot on
   `brave://extensions`; otherwise Brave refuses the capture and the result tab
   tells you.
@@ -88,7 +90,7 @@ from the Chrome Web Store. A self-signed `.crx` dropped on
   inside a panel are captured from the panel under the middle of the window;
   nested scrollers and lazy-loading pages can come out incomplete.
 - The result tab keeps its capture while it is open; reloading it rebuilds
-  the image but not your drawings.
+  the image but not your drawings or your crop.
 - Clicking the cup on a CoffeeShot tab flashes a red `!` and does nothing. It
   will not screenshot itself.
 - If Brave is set to "Ask where to save each file before downloading", you

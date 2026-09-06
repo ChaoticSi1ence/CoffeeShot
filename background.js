@@ -241,12 +241,14 @@ async function start(tab, mode) {
     if (!r || !r.ok) {
       // brave://, the Web Store, other extensions' pages and non-HTML documents
       // refuse the page script; the PDF viewer takes it but cannot scroll for
-      // us. The visible tab still works everywhere activeTab reaches.
+      // us. The visible tab still works everywhere activeTab reaches, and the
+      // result tab can crop it, so the area picker moves there.
       if (!job.strips.length) job.strips.push(await shot(tab.windowId));
       job.mode = "visible";
+      job.pick = true;   // the result tab offers the drag instead, whatever was asked for
       job.note = r && r.reason === "pdf"
-        ? "Brave's PDF viewer only allows the visible page, so here it is."
-        : "This page does not allow the area picker or full-page capture, so this is the visible tab.";
+        ? "Brave's PDF viewer only allows the visible page. Drag on it here to pick an area, or Copy or Save the whole thing."
+        : "This page does not allow the picker or full-page capture. This is the visible tab: drag on it to pick an area, or Copy or Save the whole thing.";
       return open(job);
     }
     touch(job);   // the page script drives from here
@@ -349,7 +351,7 @@ async function handle(msg) {
       return { ok: true };
     // from result.js
     case "job":
-      return { ok: true, mode: job.mode, meta: job.meta, note: job.note, count: job.strips.length, ys: job.ys };
+      return { ok: true, mode: job.mode, meta: job.meta, note: job.note, pick: !!job.pick, count: job.strips.length, ys: job.ys };
     case "strip":
       return { ok: true, dataUrl: job.strips[msg.index] || null };
     default:

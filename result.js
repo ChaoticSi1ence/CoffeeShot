@@ -11,6 +11,7 @@ let ready = false, saving = false, ops = [], cur = null, tool = "pen", color = "
 let live = null, frame = 0;   // bounds of the shape being dragged, and its queued frame
 let inkSized = false;         // the ink layer is only allocated once you draw
 let inkRect = null;           // cached canvas rect, so pointer moves read no layout
+let actions = [];             // undo stack: "stroke", or a crop with the image it replaced
 
 const status = (t) => { $("#status").textContent = t; };
 const ask = (msg) => chrome.runtime.sendMessage({ id, ...msg });
@@ -74,6 +75,20 @@ async function load() {
   ready = true;
   document.title = `CoffeeShot ${base.width}×${base.height}`;
   status(job.mode === "full" && job.meta && job.meta.capped ? "Stopped at 40 screens." : "");
+  // The page refused the in-page picker, so the area is picked here instead.
+  // On any other page that would be a second way to do what the picker did,
+  // so the control stays hidden.
+  if (job.pick) {
+    $("#crop").hidden = false;
+    pickTool("crop");
+    status("Drag to pick the area.");
+    // Fit the whole snapshot on screen while picking, so the drag never
+    // needs a scroll. The crop's setSize puts the image back to true size.
+    const room = innerHeight - $("header").offsetHeight - 24 - ($("#note").hidden ? 0 : $("#note").offsetHeight + 10);
+    const fit = Math.min(base.width / devicePixelRatio, room * base.width / base.height);
+    $("#wrap").style.width = Math.max(200, Math.round(fit)) + "px";
+    inkRect = null;
+  }
   // Keep the worker, and with it this capture, around while the tab is open,
   // so a reload can rebuild the image.
   setInterval(() => ask({ type: "ping" }).catch(() => {}), 25000);
@@ -158,6 +173,18 @@ function drawOp(ctx, op) {
     ctx.lineTo(x1 - h * Math.cos(a - 0.5), y1 - h * Math.sin(a - 0.5));
     ctx.lineTo(x1 - h * Math.cos(a + 0.5), y1 - h * Math.sin(a + 0.5));
     ctx.closePath(); ctx.fill();
+  } else if (op.tool === "crop") {
+    // a marquee: dark line under a white dashed one, readable on anything
+    const [[x0, y0], [x1, y1]] = p;
+    const x = Math.min(x0, x1), y = Math.min(y0, y1), w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
+    ctx.save();
+    ctx.lineWidth = Math.max(2, op.width * 0.6);
+    ctx.strokeStyle = "rgba(0,0,0,.65)";
+    ctx.strokeRect(x, y, w, h);
+    ctx.setLineDash([op.width * 2, op.width * 2]);
+    ctx.strokeStyle = "#fff";
+    ctx.strokeRect(x, y, w, h);
+    ctx.restore();
   }
 }
 
@@ -210,6 +237,52 @@ function paintLive() {
   repaint(live ? union(live, box) : box);
   drawOp(ictx, cur);
   live = box;
+  if (cur.tool === "crop") {
+    const [[ax, ay], [bx, by]] = cur.pts;
+    status(`${Math.round(Math.abs(bx - ax))} × ${Math.round(Math.abs(by - ay))}`);
+  }
+}
+
+// Crop the capture to the dragged rectangle. Strokes move with it, and the
+// uncropped image is kept so Ctrl+Z can bring it back.
+function applyCrop(op) {
+  const [[ax, ay], [bx, by]] = op.pts;
+  const x = Math.max(0, Math.round(Math.min(ax, bx))), y = Math.max(0, Math.round(Math.min(ay, by)));
+  const w = Math.min(base.width - x, Math.round(Math.abs(bx - ax)));
+  const h = Math.min(base.height - y, Math.round(Math.abs(by - ay)));
+  if (w < 4 || h < 4) { status("Drag to pick the area."); return; }
+  const keep = document.createElement("canvas");
+  keep.width = base.width; keep.height = base.height;
+  keep.getContext("2d").drawImage(base, 0, 0);
+  actions.push({ image: keep, ops: ops.map((o) => ({ ...o, pts: o.pts.map((q) => q.slice()) })) });
+  const cut = document.createElement("canvas");
+  cut.width = w; cut.height = h;
+  cut.getContext("2d").drawImage(base, x, y, w, h, 0, 0, w, h);
+  const pen = stroke;                 // line weight belongs to the image, not the crop
+  setSize(w, h);
+  stroke = pen;
+  bctx.drawImage(cut, 0, 0);
+  for (const o of ops) { o.pts = o.pts.map(([px, py]) => [px - x, py - y]); o.box = bounds(o); }
+  if (inkSized) { ink.width = w; ink.height = h; redrawAll(); }
+  inkRect = null;
+  document.title = `CoffeeShot ${w}×${h}`;
+  status(`Cropped to ${w} × ${h}. Enter saves, Ctrl+C copies, Ctrl+Z restores the whole tab.`);
+  pickTool("pen");
+}
+
+function undo() {
+  const a = actions.pop();
+  if (!a) return;
+  if (a === "stroke") { ops.pop(); redrawAll(); return; }
+  const pen = stroke;
+  setSize(a.image.width, a.image.height);
+  stroke = pen;
+  bctx.drawImage(a.image, 0, 0);
+  ops = a.ops;
+  if (inkSized) { ink.width = base.width; ink.height = base.height; redrawAll(); }
+  inkRect = null;
+  document.title = `CoffeeShot ${base.width}×${base.height}`;
+  status("Crop undone.");
 }
 
 // Extend a pen stroke by its newest segment, leaving everything else alone.
@@ -238,9 +311,17 @@ addEventListener("resize", dropRect, { passive: true });
 
 function commit() {
   if (!cur) return;
+  if (cur.tool === "crop") {
+    const c = cur;
+    cur = null;
+    if (live) { repaint(live); live = null; }   // take the marquee off first
+    applyCrop(c);
+    return;
+  }
   if (cur.tool !== "pen") paintLive();   // a queued frame may not have run yet
   cur.box = bounds(cur);
   ops.push(cur);
+  actions.push("stroke");
   cur = null;
   live = null;
 }
@@ -282,7 +363,7 @@ document.querySelectorAll("[data-tool]").forEach((b) => b.addEventListener("clic
 document.querySelectorAll("[data-color]").forEach((b) => b.addEventListener("click", () => pickColor(b.dataset.color, b)));
 const custom = $("#custom");
 for (const t of ["input", "change", "click"]) custom.addEventListener(t, () => pickColor(custom.value, custom));
-$("#undo").addEventListener("click", () => { ops.pop(); redrawAll(); });
+$("#undo").addEventListener("click", undo);
 
 // ---- output ---------------------------------------------------------------
 
@@ -365,7 +446,13 @@ $("#save").addEventListener("click", save);
 document.addEventListener("keydown", (e) => {
   if (e.repeat) return;
   const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
-  if (mod && k === "z") { e.preventDefault(); ops.pop(); redrawAll(); }
+  if (mod && k === "z") { e.preventDefault(); undo(); }
+  else if (e.key === "Escape" && cur) {
+    const t = cur.tool;
+    cur = null;
+    if (t === "pen") redrawAll(); else if (live) { repaint(live); live = null; }
+    if (t === "crop") status("Drag to pick the area.");
+  }
   else if (mod && k === "s") { e.preventDefault(); save(); }
   else if (mod && k === "c") {
     const s = getSelection();
@@ -374,6 +461,7 @@ document.addEventListener("keydown", (e) => {
   } else if (!mod && !e.altKey) {
     if (e.key === "Enter") { if (!(e.target instanceof HTMLButtonElement)) { e.preventDefault(); save(); } }
     else if (k === "p") pickTool("pen"); else if (k === "r") pickTool("rect"); else if (k === "a") pickTool("arrow");
+    else if (k === "x" && !$("#crop").hidden) pickTool("crop");
   }
 });
 
