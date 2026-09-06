@@ -115,3 +115,9 @@ No host permissions, no network, no analytics. Nothing leaves the browser.
 - `build.ps1` - makes the release zip in `dist/`.
 - `icons/` - the white cup for the toolbar; `icons/app/` is the same cup on a
   coffee-brown tile for the extensions page and the store.
+
+## License
+
+MIT. Use it, copy it, change it, ship it, sell it, feed it to a model. The
+only condition is keeping the copyright line. The code itself was written
+and maintained with AI assistance, so it would be odd to object to that.
