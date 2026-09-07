@@ -1,8 +1,9 @@
+![CoffeeShot: the cup beside a page under the picker. Screenshot the visible tab, an area, or the whole page. Mark it up. Copy or save. Nothing leaves your browser.](store/promo-marquee-1400x560.png)
+
 # CoffeeShot
 
-Screenshot the visible tab, a dragged area, or the full page. Mark it up,
-then copy it or save it as a PNG. A Brave extension made of plain files, with
-no network access.
+A Brave extension made of plain files, with no network access. Captures come
+out as PNGs, copied to the clipboard or saved to Downloads.
 
 It is plain Manifest V3 with no Brave-specific APIs, so it should run in Chrome
 and other Chromium browsers too. Brave is the only one it has been tested in.
@@ -14,18 +15,31 @@ on its own.
 
 ## Use
 
-Click the cup. The page freezes under a picker:
+Click the cup. The page freezes under a picker.
 
-- **Drag** a rectangle. A small toolbar appears under its bottom-right corner:
-  **Copy** puts the PNG on the clipboard, **Save** writes it to Downloads, and
-  **Edit** opens it in a CoffeeShot tab for markup. Copy and Save finish on the
-  page itself, with no tab in between. The keys are **C**, **S** and **E**, and
-  **Esc** clears the selection so you can drag again.
-- **F** captures the full page. The page scrolls itself, about two screens a
-  second, and the cup counts the screens.
+![The picker over a page: a dragged rectangle with its size in the corner and Copy, Save and Edit under it. Click the cup. Drag what you want.](store/screenshot-1.png)
+
+- **Drag** a rectangle to capture that area.
+- **F** captures the full page.
 - **V** captures the visible tab.
 - **S** saves the visible tab to Downloads right away.
 - **Esc** cancels.
+
+The overlay, the toolbars and the markup tab ease in rather than appearing
+cold. With "reduce motion" turned on in Windows, none of that animation runs.
+
+### Copy or save right there
+
+Once you have dragged a rectangle, a small toolbar appears under its
+bottom-right corner: **Copy** puts the PNG on the clipboard, **Save** writes
+it to Downloads, and **Edit** opens it in a CoffeeShot tab for markup. Copy
+and Save finish on the page itself, with no tab in between. The keys are
+**C**, **S** and **E**, and **Esc** clears the selection so you can drag
+again.
+
+![The toolbar under a selection, up close: Copy, Save, Edit. Copy or save right there.](store/screenshot-2.png)
+
+### Mark it up
 
 Edit, full page and visible tab open a CoffeeShot tab next to the page. Draw on
 it with the pen (**P**), rectangle (**R**) or arrow (**A**) in four colours, or
@@ -34,10 +48,21 @@ undoes. **Copy** (Ctrl+C) puts the PNG on the clipboard and **Save** (Enter or
 Ctrl+S) writes `coffeeshot-YYYY-MM-DD_HH-MM-SS.png` to Downloads. The tab
 closes itself once you have copied or saved.
 
+![The CoffeeShot tab, with a red rectangle and a blue arrow drawn on a capture. Mark it up. Then it gets out of the way.](store/screenshot-3.png)
+
+### The whole page
+
+**F** scrolls the page for you, about two screens a second, and the cup counts
+the screens. It opens in the CoffeeShot tab, same as Edit and V.
+
+![The CoffeeShot tab after F on this repo's GitHub page, with the top of the stitched capture in view. The whole page, stitched for you.](store/screenshot-4.png)
+
+### Other ways in
+
 Right-click a page and you get one **CoffeeShot** entry, not a submenu, which
-opens the same picker. Right-click the cup itself for the three captures
-without the picker, plus **Save visible tab now**: straight to Downloads, no
-tab, a green OK on the cup. That is what 1.0 did on every click.
+opens the same picker. Right-click the cup itself to choose the mode up front,
+area, full page or visible tab, plus **Save visible tab now**: straight to
+Downloads, no tab, a green OK on the cup. That is what 1.0 did on every click.
 
 (Chrome collapses two or more of an extension's items into a submenu and has
 no way to opt out, so the page menu keeps a single entry on purpose.)
@@ -48,9 +73,6 @@ opens the picker, the other saves the visible tab straight away. Alt+Shift+S
 and Alt+Shift+D are free. To put CoffeeShot on Ctrl+Shift+S, first clear
 Brave's "Sharing hub screenshot" binding at
 `brave://settings/system/shortcuts`.
-
-The overlay, the toolbars and the markup tab ease in rather than appearing
-cold. With "reduce motion" turned on in Windows, none of that animation runs.
 
 ## Install
 
@@ -131,6 +153,9 @@ No host permissions, no network, no analytics. Nothing leaves the browser.
 - `build.ps1` - makes the release zip in `dist/`.
 - `icons/` - the white cup for the toolbar; `icons/app/` is the same cup on a
   coffee-brown tile for the extensions page and the store.
+- `store/` - the Web Store listing: the description, the icon, the
+  screenshots and the promo tiles. The banner and pictures in this README
+  come from there, and `store/source/` has the HTML they are rendered from.
 
 ## License
 
