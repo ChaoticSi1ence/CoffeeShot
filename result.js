@@ -7,6 +7,10 @@ const bctx = base.getContext("2d"), ictx = ink.getContext("2d");
 const id = location.hash.slice(1);
 const MAX_SIDE = 16384;   // memory and encode-time budget; Blink's own side limit is 65,535 px
 const LOST = "CoffeeShot lost the capture. Click the cup again.";
+// The worker is shut down after 30 s without events, and the capture lives
+// only in its memory, so this tab keeps nudging it while it is open.
+const KEEPALIVE_MS = 25000;
+const SAVE_WAIT_MS = 60000;   // a download that never reports back must not leave Save stuck
 
 let ready = false, saving = false, ops = [], cur = null, tool = "pen", color = "#e53935", stroke = 3;
 let live = null, frame = 0;   // bounds of the shape being dragged, and its queued frame
@@ -18,10 +22,9 @@ const status = (t) => { $("#status").textContent = t; };
 const ask = (msg) => chrome.runtime.sendMessage({ id, ...msg });
 const bitmap = async (dataUrl) => createImageBitmap(await (await fetch(dataUrl)).blob());
 
-function pad(n) { return String(n).padStart(2, "0"); }
 function timestamp() {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+  const d = new Date(), p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`;
 }
 
 function disableAll() {
@@ -67,7 +70,7 @@ async function load() {
   status("Loading…");
   try {
     if (job.mode === "full") await buildFull(job);
-    else await buildOne(job);
+    else await buildOne();
   } catch (err) {
     status(err.message === LOST ? LOST : `Could not build the image: ${err.message}`);
     disableAll();
@@ -75,11 +78,11 @@ async function load() {
   }
   ready = true;
   document.title = `CoffeeShot ${base.width} × ${base.height}`;
-  status(job.mode === "full" && job.meta && job.meta.capped ? "Stopped at 40 screens." : "");
+  status(job.mode === "full" && job.meta && job.meta.capped ? `Stopped at ${job.count} screens.` : "");
   // The page refused the in-page picker, so the area is picked here instead.
   // On any other page that would be a second way to do what the picker did,
   // so the control stays hidden.
-  if (job.pick) {
+  if (job.fallback) {
     $("#crop").hidden = false;
     pickTool("crop");
     status("Drag to crop.");
@@ -92,23 +95,14 @@ async function load() {
   }
   // Keep the worker, and with it this capture, around while the tab is open,
   // so a reload can rebuild the image.
-  setInterval(() => ask({ type: "ping" }).catch(() => {}), 25000);
+  setInterval(() => ask({ type: "ping" }).catch(() => {}), KEEPALIVE_MS);
 }
 
-async function buildOne(job) {
+// The visible tab, or an area the worker has already cropped out of it.
+async function buildOne() {
   const bm = await strip(0);
-  if (job.mode === "area") {
-    const { rect, vw } = job.meta;
-    const scale = bm.width / vw;
-    const sx = Math.round(rect.x * scale), sy = Math.round(rect.y * scale);
-    const sw = Math.min(bm.width - sx, Math.round((rect.x + rect.w) * scale) - sx);
-    const sh = Math.min(bm.height - sy, Math.round((rect.y + rect.h) * scale) - sy);
-    setSize(sw, sh);
-    bctx.drawImage(bm, sx, sy, sw, sh, 0, 0, sw, sh);
-  } else {
-    setSize(bm.width, bm.height);
-    bctx.drawImage(bm, 0, 0);
-  }
+  setSize(bm.width, bm.height);
+  bctx.drawImage(bm, 0, 0);
   bm.close();
 }
 
@@ -400,40 +394,33 @@ function copy() {
   );
 }
 
+// The blob URL has to outlive the download, and closing the tab revokes it,
+// so the tab waits for the download to report complete before it goes.
 async function save() {
   if (!ready || saving) return;
   saving = true;
   status("Saving…");
   const url = URL.createObjectURL(await exportBlob());
-  const filename = `coffeeshot-${timestamp()}.png`;
   let dlId = null;
-  const done = () => {
+  const settle = (text, close) => {
+    if (!saving) return;
     saving = false;
     chrome.downloads.onChanged.removeListener(onChanged);
     URL.revokeObjectURL(url);
+    status(text);
+    if (close) closeSoon();
   };
   const onChanged = (d) => {
     if (d.id !== dlId || !d.state) return;
-    if (d.state.current === "complete") {
-      status("Saved to Downloads.");
-      done();
-      closeSoon();
-    } else if (d.state.current === "interrupted") {
-      status(`Your browser did not save the file (${(d.error && d.error.current) || "interrupted"}).`);
-      done();
-    }
+    if (d.state.current === "complete") settle("Saved to Downloads.", true);
+    else if (d.state.current === "interrupted") settle(`Your browser did not save the file (${(d.error && d.error.current) || "interrupted"}).`);
   };
   chrome.downloads.onChanged.addListener(onChanged);
   try {
-    dlId = await chrome.downloads.download({ url, filename, saveAs: false, conflictAction: "uniquify" });
-    setTimeout(() => {
-      if (!saving) return;
-      status("Save not confirmed. Check your browser's download bubble.");
-      done();
-    }, 60000);
+    dlId = await chrome.downloads.download({ url, filename: `coffeeshot-${timestamp()}.png`, saveAs: false, conflictAction: "uniquify" });
+    setTimeout(() => settle("Save not confirmed. Check your browser's download bubble."), SAVE_WAIT_MS);
   } catch (err) {
-    status(`Save failed: ${err.message}`);
-    done();
+    settle(`Save failed: ${err.message}`);
   }
 }
 

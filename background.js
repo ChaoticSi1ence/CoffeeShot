@@ -83,22 +83,16 @@ function newJob(tab, mode) {
     id: `${Date.now().toString(36)}-${(nextId++).toString(36)}`,
     tabId: tab.id, windowId: tab.windowId, index: tab.index,
     mode, strips: [], ys: [], meta: null, note: "",
+    fallback: false,   // the page refused the picker, so the result tab offers the crop instead
     opened: false, timer: null, resultTabId: null,
   };
   jobs.set(job.id, job);
   return job;
 }
 
-function pad(n) {
-  return String(n).padStart(2, "0");
-}
-
 function timestamp() {
-  const d = new Date();
-  return (
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-    `_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`
-  );
+  const d = new Date(), p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`;
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -139,18 +133,21 @@ function touch(job) {
   }, IDLE_MS);
 }
 
-// clearBadge is false when the caller is about to flash its own badge, so the
-// two calls cannot race each other.
-function drop(job, clearBadge = true) {
+// The source tab is free again: no idle timer, no busy flag, no badge.
+function release(job) {
   clearTimeout(job.timer);
-  jobs.delete(job.id);
   if (busyTab === job.tabId) busyTab = null;
-  if (clearBadge) chrome.action.setBadgeText({ tabId: job.tabId, text: "" }).catch(() => {});
+  chrome.action.setBadgeText({ tabId: job.tabId, text: "" }).catch(() => {});
 }
 
-// Crop the snapshot to the dragged rectangle. This happens here, on the
-// extension's own origin, rather than on a page canvas that Brave's
-// fingerprint protection may perturb.
+function drop(job) {
+  release(job);
+  jobs.delete(job.id);
+}
+
+// Crop the snapshot to the dragged rectangle, as a PNG data URL. This happens
+// here, on the extension's own origin, rather than on a page canvas that
+// Brave's fingerprint protection may perturb.
 async function cropPng(job, meta) {
   const src = job.strips[0];
   if (!src) throw new Error("expired");
@@ -163,7 +160,7 @@ async function cropPng(job, meta) {
   const canvas = new OffscreenCanvas(sw, sh);
   canvas.getContext("2d").drawImage(bm, sx, sy, sw, sh, 0, 0, sw, sh);
   bm.close();
-  return canvas.convertToBlob({ type: "image/png" });
+  return toDataUrl(await canvas.convertToBlob({ type: "image/png" }));
 }
 
 // Service workers have no FileReader, so base64 by hand, in chunks that will
@@ -209,9 +206,7 @@ function refusal(tab, err) {
 // result tab next to the source tab.
 async function open(job) {
   job.opened = true;
-  clearTimeout(job.timer);
-  if (busyTab === job.tabId) busyTab = null;
-  chrome.action.setBadgeText({ tabId: job.tabId, text: "" }).catch(() => {});
+  release(job);
   const url = chrome.runtime.getURL(`result.html#${job.id}`);
   let t = null;
   try {
@@ -246,8 +241,8 @@ async function start(tab, mode) {
       // result tab can crop it, so the area picker moves there.
       if (!job.strips.length) job.strips.push(await shot(tab.windowId));
       job.mode = "visible";
-      job.pick = true;   // the result tab offers the drag instead, whatever was asked for
-      job.note = r && r.reason === "pdf"
+      job.fallback = true;   // whatever was asked for, the result tab offers the crop
+      job.note = r && r.error === "pdf"
         ? "Your browser's PDF viewer only allows the visible tab. Drag on it to capture an area, or Copy or Save the whole visible tab."
         : "This page does not allow the picker or full-page capture. This is the visible tab: drag on it to capture an area, or Copy or Save the whole visible tab.";
       return open(job);
@@ -267,14 +262,7 @@ async function quickSave(tab) {
   if ((tab.url || "").startsWith(chrome.runtime.getURL(""))) return flash(tab.id, "!", "#c62828");
   if (!(await preempt(tab))) return;
   try {
-    const dataUrl = await shot(tab.windowId);
-    await chrome.downloads.download({
-      url: dataUrl,
-      filename: `coffeeshot-${timestamp()}.png`,
-      saveAs: false,
-      conflictAction: "uniquify",
-    });
-    flash(tab.id, "OK", "#2e7d32");
+    await saveNow(tab.id, await shot(tab.windowId));
   } catch (err) {
     console.error("CoffeeShot failed:", err);
     const job = newJob(tab, "error");
@@ -297,40 +285,31 @@ async function handle(msg) {
       if (!job.opened) touch(job);
       return { ok: true };
     case "cancel":
-      drop(job);
+      if (!job.opened) drop(job);   // an Esc that lands after the tab opened must not take its job
       return { ok: true };
-    case "visible":
-      job.mode = "visible";
-      open(job);
-      return { ok: true };
-    case "area":
-      job.mode = "area";
-      job.meta = msg.meta;
+    case "open": {
+      // The picker is done. An area is cropped here, once, so the result tab
+      // gets a finished PNG; a full page passes its stitching geometry along.
+      if (msg.mode === "area") job.strips[0] = await cropPng(job, msg.meta);
+      else if (msg.meta) job.meta = msg.meta;
+      job.mode = msg.mode;
       if (msg.note) job.note = msg.note;
       open(job);
       return { ok: true };
-    case "save-visible": {
-      // "Save now" from the picker: the snapshot is already in hand, so this
-      // is 1.0's path with no result tab.
-      const dataUrl = job.strips[0];
-      const tabId = job.tabId;
-      if (!dataUrl) { drop(job); return { ok: false, error: "expired" }; }
-      drop(job, false);
-      await saveNow(tabId, dataUrl);
+    }
+    case "save": {
+      // Save from the picker: 1.0's path, no result tab. With meta it is the crop.
+      if (!job.strips[0]) { drop(job); return { ok: false, error: "expired" }; }
+      const dataUrl = msg.meta ? await cropPng(job, msg.meta) : job.strips[0];
+      drop(job);
+      await saveNow(job.tabId, dataUrl);
       return { ok: true };
     }
     case "crop": {
       // The page asked for the selection so it can put it on the clipboard.
-      const dataUrl = await toDataUrl(await cropPng(job, msg.meta));
+      const dataUrl = await cropPng(job, msg.meta);
       touch(job);
       return { ok: true, dataUrl };
-    }
-    case "save-area": {
-      const dataUrl = await toDataUrl(await cropPng(job, msg.meta));
-      const tabId = job.tabId;
-      drop(job, false);
-      await saveNow(tabId, dataUrl);
-      return { ok: true };
     }
     case "full-start":
       job.mode = "full";
@@ -342,19 +321,17 @@ async function handle(msg) {
       if (job.strips.length >= MAX_STRIPS) return { ok: false, error: "cap" };
       const t = await chrome.tabs.get(job.tabId);
       if (!t.active || t.windowId !== job.windowId) throw new Error("The tab is no longer in front.");
-      job.strips.push(await shot(job.windowId));
+      const dataUrl = await shot(job.windowId);
+      if (!jobs.has(job.id)) return { ok: false, error: "expired" };   // cancelled while the shot was taken
+      job.strips.push(dataUrl);
       job.ys.push(msg.y);
       touch(job);
       badge(job.tabId, String(job.strips.length), "#455a64");
-      return { ok: true, count: job.strips.length };
-    }
-    case "done":
-      job.meta = msg.meta;
-      open(job);
       return { ok: true };
+    }
     // from result.js
     case "job":
-      return { ok: true, mode: job.mode, meta: job.meta, note: job.note, pick: !!job.pick, count: job.strips.length, ys: job.ys };
+      return { ok: true, mode: job.mode, meta: job.meta, note: job.note, fallback: job.fallback, count: job.strips.length, ys: job.ys };
     case "strip":
       return { ok: true, dataUrl: job.strips[msg.index] || null };
     default:

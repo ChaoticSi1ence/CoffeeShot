@@ -9,10 +9,15 @@
 
   const LOST = "CoffeeShot lost the capture. Click the cup again.";
   const NO_COPY = "This page could not copy directly, so it opened here. Press Copy.";
-  const PICK_ACTION = { f: "full", v: "visible", s: "save-visible" };   // pill buttons and their keys
-  const SEL_ACTION = { c: "copy", s: "save", e: "edit" };               // selection toolbar and its keys
+  const PICK_ACTION = { f: "full", v: "visible", s: "save" };   // pill buttons and their keys
+  const SEL_ACTION = { c: "copy", s: "save", e: "edit" };       // selection toolbar and its keys
+  // The worker is shut down after 30 s without events, and the capture lives
+  // only in its memory, so an open picker keeps nudging it.
+  const KEEPALIVE_MS = 20000;
 
   const send = (m) => chrome.runtime.sendMessage(m).catch(() => ({ ok: false, error: "lost" }));
+  const gone = (r) => r.error === "expired" || r.error === "lost";
+  const saved = (r) => toast(r.ok ? "Saved to Downloads." : gone(r) ? LOST : `Save failed: ${r.error}`);
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const frames = (n) => new Promise((r) => { const f = () => (n-- > 0 ? requestAnimationFrame(f) : r()); f(); });
 
@@ -27,13 +32,13 @@
     }
     if (msg.type !== "start") return;
     if (S.close) S.close();                      // a stale picker gives way
-    if (isPdfViewer()) { reply({ ok: false, reason: "pdf" }); return; }
+    if (isPdfViewer()) { reply({ ok: false, error: "pdf" }); return; }
     if (msg.mode === "full") { reply({ ok: true }); fullPage(msg.id); return; }
     try {
       picker(msg);
       reply({ ok: true });
     } catch {
-      reply({ ok: false, reason: "unsupported" });   // XML/SVG documents cannot host the picker
+      reply({ ok: false, error: "unsupported" });   // XML/SVG documents cannot host the picker
     }
   });
 
@@ -48,28 +53,67 @@
   // A host element whose shadow tree the page's stylesheets cannot reach.
   // Every :host declaration is !important because, for the host element,
   // ordinary page rules would otherwise win over the shadow stylesheet.
-  function mount(css, html) {
+  function mount(hostCss, html) {
     const host = document.createElement("div");
     const root = host.attachShadow({ mode: "closed" });
-    root.innerHTML = `<style>${css}</style>${html}`;
+    root.innerHTML = `<style>:host { ${HOST} ${hostCss} } ${CSS}</style>${html}`;
     document.documentElement.appendChild(host);
     return { host, root };
   }
 
   const HOST = "all: initial !important; position: fixed !important; z-index: 2147483647 !important; outline: none !important;";
+  const PANEL = "background: #222; color: #fff; font: 14px system-ui, sans-serif;";
+
+  // One stylesheet for everything the page ever shows: the picker and the
+  // toast, which outlives it. Animations run on entrance only. The overlay is
+  // torn down synchronously, because a fading overlay could still be on screen
+  // when the next captureVisibleTab fires during a full-page run.
+  const CSS = `
+    canvas { position: absolute; left: 0; top: 0; width: 100vw; height: 100vh; display: block; }
+    .dim { position: absolute; inset: 0; background: rgba(0,0,0,.45); }
+    /* Four plain rectangles dim everything outside the selection. One huge
+       box-shadow would repaint the entire window on every mouse move. */
+    .masks > div { position: absolute; background: rgba(0,0,0,.45); }
+    .masks > div:nth-child(-n+2) { left: 0; width: 100%; }   /* above and below span the width */
+    .masks > div:nth-child(1) { top: 0; }
+    .sel { position: absolute; border: 1px solid #fff; }
+    /* One shape for every control in the extension: a capsule. */
+    .size { position: absolute; ${PANEL} font-size: 12px; padding: 2px 6px; border-radius: 999px;
+            animation: cs-fade .1s ease-out both; }
+    .pill, .bar, .toast { position: absolute; ${PANEL} box-shadow: 0 4px 16px rgba(0,0,0,.4); border-radius: 999px; }
+    .pill, .bar { display: flex; gap: 8px; align-items: center; cursor: default; white-space: nowrap; }
+    .pill, .toast { top: 16px; left: 0; right: 0; margin: auto; width: fit-content;
+                    animation: cs-drop .2s cubic-bezier(.2,.8,.3,1) both; }
+    .pill { padding: 6px 16px; }
+    .toast { padding: 8px 14px; }
+    .toast.out { animation: cs-out .3s ease-in both; }
+    .bar { padding: 6px; transform-origin: 100% 0;
+           animation: cs-pop .2s cubic-bezier(.2,.8,.3,1) both; }
+    .pill button, .bar button { all: initial; font: inherit; color: inherit; background: #444;
+                                cursor: pointer; padding: 6px 12px; border-radius: 999px;
+                                transition: background .12s ease, transform .12s ease, opacity .12s ease; }
+    .pill button:hover, .bar button:hover { background: #666; }
+    .pill button:active, .bar button:active { transform: scale(.96); }
+    .pill button:focus-visible, .bar button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+    .bar button.primary { background: #1e88e5; }
+    .bar button.primary:hover { background: #1976d2; }
+    /* The buttons dim, not the bar: cs-pop's fill mode pins the bar's opacity. */
+    .bar.busy button { opacity: .6; pointer-events: none; }
+    .pill span { opacity: .7; }
+    [hidden] { display: none !important; }
+    @keyframes cs-fade { from { opacity: 0 } to { opacity: 1 } }
+    @keyframes cs-drop { from { opacity: 0; transform: translateY(-12px) } to { opacity: 1; transform: none } }
+    @keyframes cs-pop { from { opacity: 0; transform: translateY(-6px) scale(.94) } to { opacity: 1; transform: none } }
+    @keyframes cs-out { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(-8px) } }
+    @media (prefers-reduced-motion: reduce) {
+      :host { animation: none !important; }
+      * { animation: none !important; transition: none !important }
+    }
+  `;
 
   function toast(text) {
-    const { host, root } = mount(
-      `:host { ${HOST} left: 0 !important; right: 0 !important; top: 16px !important; display: flex !important; justify-content: center !important; pointer-events: none !important; }
-       div { background: #222; color: #fff; font: 14px system-ui, sans-serif; padding: 8px 14px; border-radius: 999px;
-             box-shadow: 0 4px 16px rgba(0,0,0,.4); animation: cs-toast-in .2s cubic-bezier(.2,.8,.3,1) both; }
-       div.out { animation: cs-toast-out .3s ease-in both; }
-       @keyframes cs-toast-in { from { opacity: 0; transform: translateY(-12px) } to { opacity: 1; transform: none } }
-       @keyframes cs-toast-out { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(-8px) } }
-       @media (prefers-reduced-motion: reduce) { div, div.out { animation: none !important } }`,
-      `<div></div>`
-    );
-    const el = root.querySelector("div");
+    const { host, root } = mount("inset: 0 !important; pointer-events: none !important;", `<div class="toast"></div>`);
+    const el = root.querySelector(".toast");
     el.textContent = text;
     setTimeout(() => el.classList.add("out"), 3600);
     setTimeout(() => host.remove(), 3950);
@@ -84,55 +128,9 @@
 
   // ---- picker -------------------------------------------------------------
 
-  // Animations run on entrance only. The overlay is torn down synchronously,
-  // because a fading overlay could still be on screen when the next
-  // captureVisibleTab fires during a full-page run.
-  const PICKER_CSS = `
-    :host { ${HOST} inset: 0 !important; cursor: crosshair !important; user-select: none !important;
-            animation: cs-fade .13s ease-out both !important; }
-    canvas { position: absolute; left: 0; top: 0; width: 100vw; height: 100vh; display: block; }
-    .dim { position: absolute; inset: 0; background: rgba(0,0,0,.45); }
-    /* Four plain rectangles dim everything outside the selection. One huge
-       box-shadow would repaint the entire window on every mouse move. */
-    .masks > div { position: absolute; background: rgba(0,0,0,.45); }
-    .masks > div:nth-child(-n+2) { left: 0; width: 100%; }   /* above and below span the width */
-    .masks > div:nth-child(1) { top: 0; }
-    .sel { position: absolute; border: 1px solid #fff; }
-    .size { position: absolute; background: #222; color: #fff; font: 12px system-ui, sans-serif; padding: 2px 6px;
-            border-radius: 999px; animation: cs-fade .1s ease-out both; }
-    .pill, .bar { position: absolute; display: flex; gap: 8px; align-items: center; background: #222; color: #fff;
-                  font: 14px system-ui, sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,.4); cursor: default; white-space: nowrap; }
-    .pill { left: 50%; top: 16px; transform: translateX(-50%); padding: 6px 16px;
-            animation: cs-drop .2s cubic-bezier(.2,.8,.3,1) both; }
-    .bar { padding: 6px; transform-origin: 100% 0;
-           animation: cs-pop .2s cubic-bezier(.2,.8,.3,1) both; }
-    /* One shape for every control in the extension: a capsule. */
-    .pill, .bar { border-radius: 999px; }
-    .pill button, .bar button { all: initial; font: 14px system-ui, sans-serif; color: #fff; background: #444;
-                                cursor: pointer; padding: 6px 12px; border-radius: 999px;
-                                transition: background .12s ease, transform .12s ease, opacity .12s ease; }
-    .pill button:hover, .bar button:hover { background: #666; }
-    .pill button:active, .bar button:active { transform: scale(.96); }
-    .pill button:focus-visible, .bar button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-    .bar button.primary { background: #1e88e5; }
-    .bar button.primary:hover { background: #1976d2; }
-    /* The buttons dim, not the bar: cs-pop's fill mode pins the bar's opacity. */
-    .bar.busy button { opacity: .6; pointer-events: none; }
-    .pill span { opacity: .7; }
-    [hidden] { display: none !important; }
-    @keyframes cs-fade { from { opacity: 0 } to { opacity: 1 } }
-    @keyframes cs-drop { from { opacity: 0; transform: translateX(-50%) translateY(-12px) }
-                         to { opacity: 1; transform: translateX(-50%) translateY(0) } }
-    @keyframes cs-pop { from { opacity: 0; transform: translateY(-6px) scale(.94) }
-                        to { opacity: 1; transform: none } }
-    @media (prefers-reduced-motion: reduce) {
-      :host { animation: none !important; }
-      * { animation: none !important; transition: none !important }
-    }
-  `;
-
   function picker({ id, mode, snapshot }) {
-    const { host, root } = mount(PICKER_CSS,
+    const { host, root } = mount(
+      "inset: 0 !important; cursor: crosshair !important; user-select: none !important; animation: cs-fade .13s ease-out both !important;",
       `<canvas></canvas><div class="dim"></div>` +
       `<div class="masks" hidden><div></div><div></div><div></div><div></div></div>` +
       `<div class="sel" hidden></div><div class="size" hidden></div>` +
@@ -156,7 +154,7 @@
 
     const ping = setInterval(async () => {
       if (!(await send({ type: "ping", id })).ok) { close(); toast(LOST); }
-    }, 20000);
+    }, KEEPALIVE_MS);
 
     const close = () => {
       if (closed) return;
@@ -169,51 +167,38 @@
     };
     S.close = close;
 
+    // The rest happens in a CoffeeShot tab; the picker's part is over. The
+    // tab is the answer, so nothing is said here unless the hand-off fails.
+    const handoff = (m) => {
+      close();
+      send({ type: "open", id, ...m }).then((r) => { if (!r.ok) toast(LOST); });
+    };
+
     // ---- whole-tab choices from the pill ----
     const finish = async (action) => {
+      if (action === "cancel") { close(); send({ type: "cancel", id }); return; }
+      if (action === "save") { close(); saved(await send({ type: "save", id })); return; }
+      if (action === "visible") { handoff({ mode: "visible" }); return; }
       close();
-      if (action === "cancel") { send({ type: "cancel", id }); return; }
-      if (action === "save-visible") {
-        const r = await send({ type: "save-visible", id });
-        toast(r.ok ? "Saved to Downloads." : (r.error === "expired" || r.error === "lost" ? LOST : `Save failed: ${r.error}`));
-        return;
-      }
-      const r = await send({ type: action === "full" ? "full-start" : "visible", id });
-      if (!r.ok) toast(LOST);
-      else if (action === "full") fullPage(id);
+      const r = await send({ type: "full-start", id });
+      if (r.ok) fullPage(id); else toast(LOST);
     };
 
     // ---- selection choices from the toolbar ----
     // Copy and Save finish here. Only Edit opens the CoffeeShot tab.
     const act = (action) => {
       if (busy || !selRect) return;
-      const meta = { rect: selRect, vw: innerWidth, vh: innerHeight };
-
-      if (action === "edit") {
-        busy = true;
-        close();
-        send({ type: "area", id, meta }).then((r) => { if (!r.ok) toast(LOST); });
-        return;
-      }
-
-      if (action === "save") {
-        busy = true;
-        close();
-        send({ type: "save-area", id, meta }).then((r) => {
-          toast(r.ok ? "Saved to Downloads." : (r.error === "expired" || r.error === "lost" ? LOST : `Save failed: ${r.error}`));
-        });
-        return;
-      }
+      busy = true;
+      const meta = { rect: selRect, vw: innerWidth };
+      if (action === "edit") { handoff({ mode: "area", meta }); return; }
+      if (action === "save") { close(); send({ type: "save", id, meta }).then(saved); return; }
 
       // Copy. navigator.clipboard exists only in a secure context, so plain
       // http:// pages hand the crop to the CoffeeShot tab, which says why.
       if (!window.isSecureContext || !navigator.clipboard || !window.ClipboardItem) {
-        busy = true;
-        close();
-        send({ type: "area", id, meta, note: NO_COPY }).then((r) => { if (!r.ok) toast(LOST); });
+        handoff({ mode: "area", meta, note: NO_COPY });
         return;
       }
-      busy = true;
       bar.classList.add("busy");
       // write() is called inside the click with the PNG still pending, so the
       // crop can take as long as it likes without losing the user gesture.
@@ -224,10 +209,7 @@
       })();
       navigator.clipboard.write([new ClipboardItem({ "image/png": png })]).then(
         () => { close(); toast("Copied to clipboard."); send({ type: "cancel", id }); },
-        () => {
-          close();
-          send({ type: "area", id, meta, note: NO_COPY }).then((r) => { if (!r.ok) toast(LOST); });
-        }
+        () => handoff({ mode: "area", meta, note: NO_COPY })
       );
     };
 
@@ -436,13 +418,13 @@
         const r = await send({ type: "shot", id, y: actual });
         if (!r.ok) {
           if (r.error === "cap") { capped = true; break; }
-          throw new Error(r.error === "expired" || r.error === "lost" ? LOST : r.error);
+          throw new Error(gone(r) ? LOST : r.error);
         }
         if (actual + clipH >= total - 1) break;
         y = actual + clipH;
       }
       const meta = { vw: innerWidth, vh: viewH, clipTop, clipH, total, clientWidth: rootEl.clientWidth, inner: !!el, capped };
-      const r = await send({ type: "done", id, meta });
+      const r = await send({ type: "open", id, mode: "full", meta });
       if (!r.ok) throw new Error(LOST);
     } catch (err) {
       send({ type: "cancel", id });

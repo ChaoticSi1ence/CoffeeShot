@@ -23,7 +23,7 @@ button.primary { background: var(--accent); color: #fff; border-color: var(--acc
 button.primary:hover { background: var(--accent-hover); }
 button:disabled { opacity: .5; cursor: default; }
 .colors { display: flex; align-items: center; gap: 6px; margin: 0 6px; }
-.colors > * { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 1px solid var(--line); box-sizing: border-box;
+.colors > * { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 1px solid var(--line);
               transition: outline-color .12s ease, transform .12s ease; }
 .colors > *.on { outline: 2px solid var(--fg); outline-offset: 2px; }
 .colors input[type="color"] { background: none; cursor: pointer; appearance: none; -webkit-appearance: none; }
