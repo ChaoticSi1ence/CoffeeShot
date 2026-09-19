@@ -1,0 +1,67 @@
+<!doctype html><html><head><meta charset="utf-8"><title>CoffeeShot icons</title></head><body><pre id="out"></pre><script>
+// Builds every icon PNG from icon.jpg and glyph.svg. make-icons.ps1 runs this
+// page in headless Edge and writes the data URLs it leaves in #out to disk.
+(async () => {
+  const out = {};
+  const load = (src) => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error("cannot load " + src)); i.src = src; });
+  const canvas = (w, h) => { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; };
+  // Downscale in halves; one big step would skip most of the pixels.
+  const scaleTo = (src, size) => {
+    let cur = src, w = src.width, h = src.height;
+    while (w / 2 >= size) {
+      const c = canvas(Math.round(w / 2), Math.round(h / 2)), x = c.getContext("2d");
+      x.imageSmoothingQuality = "high"; x.drawImage(cur, 0, 0, c.width, c.height);
+      cur = c; w = c.width; h = c.height;
+    }
+    const c = canvas(size, size), x = c.getContext("2d");
+    x.imageSmoothingQuality = "high"; x.drawImage(cur, 0, 0, size, size);
+    return c;
+  };
+
+  // 1. The sticker: crop to the white outline's box and knock the corners out
+  //    by flooding the ground from the four corners. The outline is white and
+  //    the ground never is, so the flood stops exactly at the outline.
+  const art = await load("icon.jpg");
+  const X0 = 104, Y0 = 104, W = 817, H = 833;
+  const crop = canvas(W, H), cx = crop.getContext("2d");
+  cx.drawImage(art, X0, Y0, W, H, 0, 0, W, H);
+  const id = cx.getImageData(0, 0, W, H), d = id.data;
+  const ground = (p) => Math.min(d[p * 4], d[p * 4 + 1], d[p * 4 + 2]) < 236;
+  const seen = new Uint8Array(W * H), stack = [0, W - 1, (H - 1) * W, W * H - 1];
+  while (stack.length) {
+    const p = stack.pop();
+    if (seen[p] || !ground(p)) continue;
+    seen[p] = 1;
+    const x = p % W, y = (p - x) / W;
+    if (x > 0) stack.push(p - 1); if (x < W - 1) stack.push(p + 1);
+    if (y > 0) stack.push(p - W); if (y < H - 1) stack.push(p + W);
+  }
+  let cut = 0;
+  for (let p = 0; p < W * H; p++) if (seen[p]) { d[p * 4 + 3] = 0; cut++; }
+  cx.putImageData(id, 0, 0);
+  // square it up: the outline box is a few pixels taller than wide
+  const S = Math.max(W, H), sq = canvas(S, S);
+  sq.getContext("2d").drawImage(crop, Math.round((S - W) / 2), Math.round((S - H) / 2));
+  out["info"] = `cut ${cut} ground pixels of ${W * H}; square ${S}`;
+
+  // 2. The app tile at every size the manifest lists.
+  for (const s of [16, 32, 48, 128]) out[`app/icon${s}.png`] = scaleTo(sq, s).toDataURL("image/png");
+
+  // 3. The store icon: 96 px of art on a 128 px transparent square, as the
+  //    store's guidance asks.
+  const store = canvas(128, 128);
+  store.getContext("2d").drawImage(scaleTo(sq, 96), 16, 16);
+  out["store-icon-128.png"] = store.toDataURL("image/png");
+  // 3b. A 512 px sticker for the store slides and tiles.
+  out["sticker.png"] = scaleTo(sq, 512).toDataURL("image/png");
+
+  // 4. The toolbar glyph, drawn at each size rather than shrunk. The two
+  //    small sizes use the simpler variant.
+  const glyph = await load("glyph.svg"), small = await load("glyph-small.svg");
+  for (const s of [16, 32, 48, 128]) {
+    const c = canvas(s, s); c.getContext("2d").drawImage(s <= 32 ? small : glyph, 0, 0, s, s);
+    out[`icon${s}.png`] = c.toDataURL("image/png");
+  }
+  document.getElementById("out").textContent = JSON.stringify(out);
+})().catch((e) => { document.getElementById("out").textContent = JSON.stringify({ error: String(e) }); });
+</script></body></html>

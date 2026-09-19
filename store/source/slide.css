@@ -1,13 +1,15 @@
-html, body { margin: 0; width: 1280px; height: 800px; overflow: hidden; background: #5e3a26; color: #fff;
+/* The store slides take their colours from the icon: its mint and peach for
+   the ground, its navy line work for the type, its camera orange for accents. */
+html, body { margin: 0; width: 1280px; height: 800px; overflow: hidden; background: #e3f6f3; color: #203958;
              font-family: "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
 .wrap { position: relative; width: 1280px; height: 800px;
-        background: radial-gradient(1200px 700px at 20% 0%, #6d4630 0%, #5e3a26 55%, #4a2d1d 100%); }
-.cup { position: absolute; right: 72px; top: 60px; width: 72px; height: 72px; }
+        background: radial-gradient(1200px 700px at 20% 0%, #bdf1ea 0%, #e3f6f3 45%, #fde2c6 100%); }
+.cup { position: absolute; right: 72px; top: 56px; width: 84px; height: 84px; }
 .text { position: absolute; left: 72px; top: 64px; max-width: 960px; }
 h1 { margin: 0 0 18px; font-size: 50px; font-weight: 700; line-height: 1.12; letter-spacing: -0.01em; }
-p.sub { margin: 0; font-size: 24px; line-height: 1.4; color: rgba(255,255,255,.8); max-width: 900px; }
+p.sub { margin: 0; font-size: 24px; line-height: 1.4; color: rgba(32,57,88,.78); max-width: 900px; }
 .shot { position: absolute; left: 140px; top: 290px; width: 1000px; border-radius: 14px; overflow: hidden;
-        background: #fff; border: 1px solid rgba(255,255,255,.16); box-shadow: 0 30px 70px rgba(0,0,0,.5); }
+        background: #fff; border: 1px solid rgba(32,57,88,.18); box-shadow: 0 30px 70px rgba(32,57,88,.28); }
 .shot img { display: block; width: 100%; }
 /* a shot that runs off the bottom edge, showing its lower part */
 .shot.bottom { height: 520px; }

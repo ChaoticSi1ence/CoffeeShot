@@ -57,7 +57,7 @@ you have copied or saved, and **Esc** closes it if you have not drawn anything.
 **F** scrolls the page for you, about two screens a second, and the cup counts
 the screens. **Esc** stops it. It opens in the CoffeeShot tab, same as Edit and V.
 
-![The CoffeeShot tab after F on this repo's GitHub page, with the top of the stitched capture in view. The whole page, stitched for you.](store/screenshot-4.png)
+![The CoffeeShot tab after F on a long documentation page, with the top of the stitched capture in view. The whole page, stitched for you.](store/screenshot-4.png)
 
 ### Other ways in
 
@@ -152,11 +152,13 @@ No host permissions, no network, no analytics. Nothing leaves the browser.
 - `result.html`, `result.css`, `result.js` - the result tab: stitch, draw,
   copy, save.
 - `build.ps1` - makes the release zip in `dist/`.
-- `icons/` - the white cup for the toolbar; `icons/app/` is the same cup on a
-  coffee-brown tile for the extensions page and the store.
+- `icons/` - the white mug-and-camera glyph for the toolbar; `icons/app/` is
+  the full-colour icon for the extensions page and the store. `icons/source/`
+  has the artwork, the glyph SVGs and the script that makes the PNGs.
 - `store/` - the Web Store listing: the description, the icon, the
   screenshots and the promo tiles. The banner and pictures in this README
-  come from there, and `store/source/` has the HTML they are rendered from.
+  come from there, and `store/source/` has the HTML and the script that
+  render them.
 
 ## License
 

@@ -2,8 +2,8 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>CoffeeShot 1280×3400</title>
-  <link rel="stylesheet" href="result.css">
+  <title>CoffeeShot 1280 × 3400</title>
+  <link rel="stylesheet" href="../../result.css">
   <style>
     html, body { width: 1280px; height: 800px; overflow: hidden; }
     * { animation: none !important; transition: none !important; }
@@ -12,9 +12,10 @@
 <body>
   <header>
     <div class="tools">
-      <button data-tool="pen" class="on" title="Pen (P)">Pen</button>
-      <button data-tool="rect" title="Rectangle (R)">Rectangle</button>
-      <button data-tool="arrow" title="Arrow (A)">Arrow</button>
+      <button data-tool="pen" class="on">Pen (P)</button>
+      <button data-tool="rect">Rectangle (R)</button>
+      <button data-tool="arrow">Arrow (A)</button>
+      <button data-tool="crop">Crop (X)</button>
       <span class="colors">
         <button data-color="#e53935" class="on" style="background:#e53935" title="Red"></button>
         <button data-color="#fdd835" style="background:#fdd835" title="Yellow"></button>
@@ -26,8 +27,8 @@
     </div>
     <div class="actions">
       <span id="status"></span>
-      <button id="copy" title="Copy to clipboard (Ctrl+C)">Copy</button>
-      <button id="save" class="primary" title="Save to Downloads (Enter or Ctrl+S)">Save</button>
+      <button id="copy" class="primary" title="Copy to clipboard (Enter or Ctrl+C)">Copy (C)</button>
+      <button id="save" title="Save to Downloads (Ctrl+S)">Save (S)</button>
     </div>
   </header>
   <p id="note" hidden></p>
@@ -39,17 +40,16 @@
   </main>
   <script>
     // A stitched full page, shown the way the tab shows one that is taller
-    // than the window: scaled down to fit the height.
+    // than the window: scaled down to fit.
     const base = document.getElementById("base"), wrap = document.getElementById("wrap");
     const img = new Image();
     img.onload = () => {
       base.width = img.width; base.height = img.height;
       base.getContext("2d").drawImage(img, 0, 0);
-      const room = innerHeight - document.querySelector("header").offsetHeight - 24;
       wrap.style.width = "560px";
       wrap.classList.add("ready");
     };
-    img.src = "page-tall.png";
+    img.src = "work/page-tall.png";
   </script>
 </body>
 </html>

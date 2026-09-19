@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>CoffeeShot 770 × 465</title>
+  <link rel="stylesheet" href="../../result.css">
+  <style>
+    html, body { width: 1280px; height: 800px; overflow: hidden; }
+    * { animation: none !important; transition: none !important; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="tools">
+      <button data-tool="pen">Pen (P)</button>
+      <button data-tool="rect">Rectangle (R)</button>
+      <button data-tool="arrow" class="on">Arrow (A)</button>
+      <button data-tool="crop">Crop (X)</button>
+      <span class="colors">
+        <button data-color="#e53935" style="background:#e53935" title="Red"></button>
+        <button data-color="#fdd835" style="background:#fdd835" title="Yellow"></button>
+        <button data-color="#1e88e5" class="on" style="background:#1e88e5" title="Blue"></button>
+        <button data-color="#111111" style="background:#111111" title="Black"></button>
+        <input type="color" id="custom" value="#00c853" title="Pick any colour">
+      </span>
+      <button id="undo" title="Undo (Ctrl+Z)">Undo</button>
+    </div>
+    <div class="actions">
+      <span id="status"></span>
+      <button id="copy" class="primary" title="Copy to clipboard (Enter or Ctrl+C)">Copy (C)</button>
+      <button id="save" title="Save to Downloads (Ctrl+S)">Save (S)</button>
+    </div>
+  </header>
+  <p id="note" hidden></p>
+  <main id="stage">
+    <div id="wrap">
+      <canvas id="base"></canvas>
+      <canvas id="ink"></canvas>
+    </div>
+  </main>
+  <script>
+    // The same crop the picker mock shows, drawn the way result.js draws it,
+    // with a rectangle and an arrow at the extension's stroke width.
+    const W = 770, H = 465, SX = 250, SY = 235;
+    const base = document.getElementById("base"), ink = document.getElementById("ink");
+    base.width = ink.width = W; base.height = ink.height = H;
+    const wrap = document.getElementById("wrap");
+    wrap.style.width = W + "px";
+    wrap.classList.add("ready");
+    const stroke = Math.max(3, Math.round(W / 600));
+    const img = new Image();
+    img.onload = () => {
+      base.getContext("2d").drawImage(img, SX, SY, W, H, 0, 0, W, H);
+      const c = ink.getContext("2d");
+      c.lineWidth = stroke; c.lineCap = "round"; c.lineJoin = "round";
+      c.strokeStyle = "#e53935";
+      c.strokeRect(478, 42, 268, 176);
+      c.strokeStyle = c.fillStyle = "#1e88e5";
+      const x0 = 250, y0 = 380, x1 = 462, y1 = 150;
+      const a = Math.atan2(y1 - y0, x1 - x0), h = stroke * 4;
+      c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke();
+      c.beginPath(); c.moveTo(x1, y1);
+      c.lineTo(x1 - h * Math.cos(a - 0.5), y1 - h * Math.sin(a - 0.5));
+      c.lineTo(x1 - h * Math.cos(a + 0.5), y1 - h * Math.sin(a + 0.5));
+      c.closePath(); c.fill();
+    };
+    img.src = "work/page.png";
+  </script>
+</body>
+</html>

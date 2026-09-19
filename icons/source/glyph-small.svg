@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- The same mug for 16 and 32 px, where the camera's detail would smear:
+       one lens hole instead of the whole camera, heavier steam and handle. -->
+  <defs>
+    <mask id="lens">
+      <rect width="128" height="128" fill="#fff"/>
+      <circle cx="52" cy="80" r="18" fill="#000"/>
+      <rect x="38" y="52" width="28" height="14" rx="4" fill="#000"/>
+    </mask>
+  </defs>
+  <path d="M60 6c-11 9 11 15 0 26" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round"/>
+  <circle cx="93" cy="80" r="15" fill="none" stroke="#fff" stroke-width="11"/>
+  <rect x="14" y="40" width="74" height="74" rx="12" fill="#fff" mask="url(#lens)"/>
+  <circle cx="52" cy="80" r="8" fill="#fff"/>
+</svg>
