@@ -17,6 +17,9 @@ let live = null, frame = 0;   // bounds of the shape being dragged, and its queu
 let inkSized = false;         // the ink layer is only allocated once you draw
 let inkRect = null;           // cached canvas rect, so pointer moves read no layout
 let actions = [];             // undo stack: "stroke", or a crop with the image it replaced
+let sel = null;               // live crop selection {x, y, w, h}, whole image pixels inside the image
+let drag = null;              // crop gesture: {anchor:[x,y]} grows from a fixed corner, {grab:[dx,dy]} moves
+const CROP_HINT = "Drag to crop.";
 
 const status = (t) => { $("#status").textContent = t; };
 const ask = (msg) => chrome.runtime.sendMessage({ id, ...msg });
@@ -79,13 +82,9 @@ async function load() {
   ready = true;
   document.title = `CoffeeShot ${base.width} × ${base.height}`;
   status(job.mode === "full" && job.meta && job.meta.capped ? `Stopped at ${job.count} screens.` : "");
-  // The page refused the in-page picker, so the area is picked here instead.
-  // On any other page that would be a second way to do what the picker did,
-  // so the control stays hidden.
+  // The page refused the in-page picker, so the crop stands in for it here.
   if (job.fallback) {
-    $("#crop").hidden = false;
     pickTool("crop");
-    status("Drag to crop.");
     // Fit the whole snapshot on screen while picking, so the drag never
     // needs a scroll. The crop's setSize puts the image back to true size.
     const room = innerHeight - $("header").offsetHeight - 24 - ($("#note").hidden ? 0 : $("#note").offsetHeight + 10);
@@ -168,18 +167,6 @@ function drawOp(ctx, op) {
     ctx.lineTo(x1 - h * Math.cos(a - 0.5), y1 - h * Math.sin(a - 0.5));
     ctx.lineTo(x1 - h * Math.cos(a + 0.5), y1 - h * Math.sin(a + 0.5));
     ctx.closePath(); ctx.fill();
-  } else if (op.tool === "crop") {
-    // a marquee: dark line under a white dashed one, readable on anything
-    const [[x0, y0], [x1, y1]] = p;
-    const x = Math.min(x0, x1), y = Math.min(y0, y1), w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
-    ctx.save();
-    ctx.lineWidth = Math.max(2, op.width * 0.6);
-    ctx.strokeStyle = "rgba(0,0,0,.65)";
-    ctx.strokeRect(x, y, w, h);
-    ctx.setLineDash([op.width * 2, op.width * 2]);
-    ctx.strokeStyle = "#fff";
-    ctx.strokeRect(x, y, w, h);
-    ctx.restore();
   }
 }
 
@@ -232,20 +219,96 @@ function paintLive() {
   repaint(live ? union(live, box) : box);
   drawOp(ictx, cur);
   live = box;
-  if (cur.tool === "crop") {
-    const [[ax, ay], [bx, by]] = cur.pts;
-    status(`${Math.round(Math.abs(bx - ax))} × ${Math.round(Math.abs(by - ay))}`);
-  }
 }
 
-// Crop the capture to the dragged rectangle. Strokes move with it, and the
-// uncropped image is kept so Ctrl+Z can bring it back.
-function applyCrop(op) {
-  const [[ax, ay], [bx, by]] = op.pts;
-  const x = Math.max(0, Math.round(Math.min(ax, bx))), y = Math.max(0, Math.round(Math.min(ay, by)));
-  const w = Math.min(base.width - x, Math.round(Math.abs(bx - ax)));
-  const h = Math.min(base.height - y, Math.round(Math.abs(by - ay)));
-  if (w < 4 || h < 4) { status("Drag to crop."); return; }
+// ---- crop -----------------------------------------------------------------
+// The selection is not a stroke. It sits on the ink layer over the strokes,
+// looks like the picker (everything outside dimmed, a white edge, corner
+// handles), never enters `ops`, and never reaches the exported PNG: Copy and
+// Save apply it first.
+
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+// n CSS pixels on screen, in image pixels. The canvas is CSS-scaled: 1:1 is
+// width/DPR, and a fallback page is fitted to the window, so this is measured.
+function css(n) {
+  if (!inkRect) inkRect = ink.getBoundingClientRect();
+  return n * ink.width / inkRect.width;
+}
+
+function rectFrom([ax, ay], [px, py]) {
+  const x0 = clamp(Math.round(Math.min(ax, px)), 0, base.width), x1 = clamp(Math.round(Math.max(ax, px)), 0, base.width);
+  const y0 = clamp(Math.round(Math.min(ay, py)), 0, base.height), y1 = clamp(Math.round(Math.max(ay, py)), 0, base.height);
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
+// What is under p: a corner (returned as the OPPOSITE corner, which stays put
+// while this one is dragged), the inside (returned as the grab offset), or
+// nothing. Eight CSS pixels of slack, whatever the zoom.
+function hitSel(p) {
+  if (!sel) return null;
+  const t = css(8), { x, y, w, h } = sel;
+  const near = (a, b) => Math.abs(a - b) <= t;
+  const ax = near(p[0], x) ? x + w : near(p[0], x + w) ? x : null;
+  const ay = near(p[1], y) ? y + h : near(p[1], y + h) ? y : null;
+  if (ax !== null && ay !== null) return { anchor: [ax, ay] };
+  if (p[0] > x && p[0] < x + w && p[1] > y && p[1] < y + h) return { grab: [p[0] - x, p[1] - y] };
+  return null;
+}
+
+// Only the rectangle that changed is repainted; the dim beyond it is still
+// right from the previous frame. live === null means the layer holds nothing
+// but the strokes, so the first frame dims the whole canvas without a repaint.
+function paintSel() {
+  frame = 0;
+  if (!sel) return;
+  const { x, y, w, h } = sel, W = ink.width, H = ink.height, u = css(1), s = css(3);
+  const box = [x - s - u, y - s - u, x + w + s + u, y + h + s + u];
+  const area = live ? union(live, box) : [0, 0, W, H];
+  if (live) repaint(area);
+  ictx.save();
+  ictx.beginPath(); ictx.rect(area[0], area[1], area[2] - area[0], area[3] - area[1]); ictx.clip();
+  ictx.fillStyle = "rgba(0,0,0,.45)";
+  ictx.fillRect(0, 0, W, y); ictx.fillRect(0, y + h, W, H - y - h);   // above, below
+  ictx.fillRect(0, y, x, h); ictx.fillRect(x + w, y, W - x - w, h);   // left, right
+  ictx.strokeStyle = "#fff"; ictx.lineWidth = u;
+  ictx.strokeRect(x - u / 2, y - u / 2, w + u, h + u);                // the edge sits outside the kept pixels
+  ictx.fillStyle = "#fff";
+  for (const [hx, hy] of [[x, y], [x + w, y], [x, y + h], [x + w, y + h]]) ictx.fillRect(hx - s, hy - s, 2 * s, 2 * s);
+  ictx.restore();
+  live = box;
+  if (drag) status(`${w} × ${h}`);
+}
+
+function setCursor(c) { if (ink.style.cursor !== c) ink.style.cursor = c; }
+
+function clearSel() {
+  drag = null;
+  setCursor("");
+  if (!sel) return;
+  sel = null;
+  redrawAll();   // takes the dim and the handles off
+  status(tool === "crop" ? CROP_HINT : "");
+}
+
+// Always leaves sel null and the ink layer showing only the strokes.
+function applySel() {
+  if (!sel) return;
+  if (sel.w < 4 || sel.h < 4) { clearSel(); return; }
+  const r = sel;
+  sel = drag = null;
+  setCursor("");
+  applyCrop(r);
+}
+
+function hover(p) {
+  const h = hitSel(p);
+  setCursor(!h ? "" : h.grab ? "move" : (h.anchor[0] > p[0]) === (h.anchor[1] > p[1]) ? "nwse-resize" : "nesw-resize");
+}
+
+// Crop the capture to the rectangle. Strokes move with it, and the uncropped
+// image is kept so Ctrl+Z can bring it back.
+function applyCrop({ x, y, w, h }) {
   const keep = document.createElement("canvas");
   keep.width = base.width; keep.height = base.height;
   keep.getContext("2d").drawImage(base, 0, 0);
@@ -268,6 +331,8 @@ function applyCrop(op) {
 function undo() {
   const a = actions.pop();
   if (!a) return;
+  sel = drag = null;   // the image may change size under it; both branches redraw
+  setCursor("");
   if (a === "stroke") { ops.pop(); redrawAll(); return; }
   const pen = stroke;
   setSize(a.image.width, a.image.height);
@@ -305,14 +370,14 @@ addEventListener("scroll", dropRect, { passive: true, capture: true });
 addEventListener("resize", dropRect, { passive: true });
 
 function commit() {
-  if (!cur) return;
-  if (cur.tool === "crop") {
-    const c = cur;
-    cur = null;
-    if (live) { repaint(live); live = null; }   // take the marquee off first
-    applyCrop(c);
+  if (drag) {
+    // A crop drag ends with the selection still live, waiting for Enter.
+    drag = null;
+    if (sel.w < 4 || sel.h < 4) clearSel();   // a click, or too small to keep
+    else status(`${sel.w} × ${sel.h}. Enter crops, Esc clears.`);
     return;
   }
+  if (!cur) return;
   if (cur.tool !== "pen") paintLive();   // a queued frame may not have run yet
   cur.box = bounds(cur);
   ops.push(cur);
@@ -322,15 +387,30 @@ function commit() {
 }
 
 ink.addEventListener("pointerdown", (e) => {
-  if (!ready || e.button !== 0 || cur) return;
+  if (!ready || e.button !== 0 || cur || drag) return;
   sizeInk();
   ink.setPointerCapture(e.pointerId);
   const p = pt(e);
+  if (tool === "crop") {
+    drag = hitSel(p);                                                        // a corner, or the inside
+    if (!drag) { drag = { anchor: p }; sel = rectFrom(p, p); paintSel(); }   // outside: start afresh
+    return;
+  }
   cur = { tool, color, width: stroke, pts: [p, p] };
   live = null;
 });
 ink.addEventListener("pointermove", (e) => {
-  if (!cur) return;
+  if (drag) {
+    const p = pt(e);
+    if (drag.anchor) sel = rectFrom(drag.anchor, p);
+    else {
+      sel.x = clamp(Math.round(p[0] - drag.grab[0]), 0, base.width - sel.w);
+      sel.y = clamp(Math.round(p[1] - drag.grab[1]), 0, base.height - sel.h);
+    }
+    if (!frame) frame = requestAnimationFrame(paintSel);
+    return;
+  }
+  if (!cur) { if (sel) hover(pt(e)); return; }
   const p = pt(e);
   if (cur.tool === "pen") {
     cur.pts.push(p);
@@ -341,10 +421,12 @@ ink.addEventListener("pointermove", (e) => {
   }
 });
 for (const t of ["pointerup", "pointercancel", "lostpointercapture"]) ink.addEventListener(t, commit);
+ink.addEventListener("dblclick", (e) => { if (sel && hitSel(pt(e))) applySel(); });
 
 function pickTool(value) {
-  tool = value;
+  if (value !== tool) { tool = value; clearSel(); }   // switching tools drops the selection
   document.querySelectorAll("[data-tool]").forEach((b) => b.classList.toggle("on", b.dataset.tool === value));
+  if (value === "crop" && !sel) status(CROP_HINT);
 }
 
 // The swatches and the colour input share one selected state, so whichever
@@ -354,7 +436,9 @@ function pickColor(value, el) {
   document.querySelectorAll(".colors > *").forEach((b) => b.classList.toggle("on", b === el));
 }
 
-document.querySelectorAll("[data-tool]").forEach((b) => b.addEventListener("click", () => pickTool(b.dataset.tool)));
+// The Crop button is the one on-screen way to apply a live selection.
+document.querySelectorAll("[data-tool]").forEach((b) =>
+  b.addEventListener("click", () => (sel && b.dataset.tool === "crop" ? applySel() : pickTool(b.dataset.tool))));
 document.querySelectorAll("[data-color]").forEach((b) => b.addEventListener("click", () => pickColor(b.dataset.color, b)));
 const custom = $("#custom");
 for (const t of ["input", "change", "click"]) custom.addEventListener(t, () => pickColor(custom.value, custom));
@@ -387,6 +471,7 @@ function exportBlob() {
 // promise so encoding time cannot outlive the user activation.
 function copy() {
   if (!ready) return;
+  applySel();   // a drawn selection was meant; synchronous, so the gesture survives
   status("Copying…");
   navigator.clipboard.write([new ClipboardItem({ "image/png": exportBlob() })]).then(
     () => { status("Copied to clipboard."); closeSoon(); },
@@ -398,6 +483,7 @@ function copy() {
 // so the tab waits for the download to report complete before it goes.
 async function save() {
   if (!ready || saving) return;
+  applySel();
   saving = true;
   status("Saving…");
   const url = URL.createObjectURL(await exportBlob());
@@ -431,12 +517,12 @@ document.addEventListener("keydown", (e) => {
   if (e.repeat || e.altKey) return;
   const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
   if (mod && k === "z") { e.preventDefault(); undo(); }
-  else if (e.key === "Escape" && cur) {
+  else if (e.key === "Escape" && cur) {          // one level back: abort the stroke
     const t = cur.tool;
     cur = null;
     if (t === "pen") redrawAll(); else if (live) { repaint(live); live = null; }
-    if (t === "crop") status("Drag to crop.");
   }
+  else if (e.key === "Escape" && sel) clearSel();   // next level: drop the selection
   else if (e.key === "Escape") {
     // Nothing drawn: the tab has nothing to lose, so Esc closes it. Not while
     // a save is in flight, since closing revokes the blob under the download.
@@ -450,11 +536,12 @@ document.addEventListener("keydown", (e) => {
   }
   else if (mod) return;                                                  // other chords belong to the browser
   else if (e.key === "Enter") {
-    // A focused Copy or Save clicks itself; anywhere else Enter is Copy.
-    if (e.target.id !== "copy" && e.target.id !== "save") { e.preventDefault(); copy(); }
+    // A focused Copy or Save clicks itself. Anywhere else Enter applies a
+    // live selection, or copies when there is none.
+    if (e.target.id !== "copy" && e.target.id !== "save") { e.preventDefault(); if (sel) applySel(); else copy(); }
   }
   else if (k === "p") pickTool("pen"); else if (k === "r") pickTool("rect"); else if (k === "a") pickTool("arrow");
-  else if (k === "x" && !$("#crop").hidden) pickTool("crop");
+  else if (k === "x") pickTool("crop");
 });
 
 load();
