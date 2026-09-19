@@ -8,6 +8,7 @@
   const S = (window.__coffeeshot = { close: null });
 
   const LOST = "CoffeeShot lost the capture. Click the cup again.";
+  const NO_COPY = "This page could not copy directly, so it opened here. Press Copy.";
   const PICK_ACTION = { f: "full", v: "visible", s: "save-visible" };   // pill buttons and their keys
   const SEL_ACTION = { c: "copy", s: "save", e: "edit" };               // selection toolbar and its keys
 
@@ -17,7 +18,13 @@
 
   chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
     if (msg.type === "alive") { reply({ ok: true }); return; }
-    if (msg.type === "close") { if (S.close) S.close(); reply({ ok: true }); return; }
+    if (msg.type === "close") {
+      if (S.close) S.close();
+      // Answer once the overlay is off the screen: the caller's next shot may
+      // be of this tab. A hidden tab gets no frames, so it answers at once.
+      (document.hidden ? Promise.resolve() : frames(2)).then(() => reply({ ok: true }));
+      return true;
+    }
     if (msg.type !== "start") return;
     if (S.close) S.close();                      // a stale picker gives way
     if (isPdfViewer()) { reply({ ok: false, reason: "pdf" }); return; }
@@ -54,7 +61,7 @@
   function toast(text) {
     const { host, root } = mount(
       `:host { ${HOST} left: 0 !important; right: 0 !important; top: 16px !important; display: flex !important; justify-content: center !important; pointer-events: none !important; }
-       div { background: #222; color: #fff; font: 14px system-ui, sans-serif; padding: 8px 14px; border-radius: 8px;
+       div { background: #222; color: #fff; font: 14px system-ui, sans-serif; padding: 8px 14px; border-radius: 999px;
              box-shadow: 0 4px 16px rgba(0,0,0,.4); animation: cs-toast-in .2s cubic-bezier(.2,.8,.3,1) both; }
        div.out { animation: cs-toast-out .3s ease-in both; }
        @keyframes cs-toast-in { from { opacity: 0; transform: translateY(-12px) } to { opacity: 1; transform: none } }
@@ -92,23 +99,25 @@
     .masks > div:nth-child(1) { top: 0; }
     .sel { position: absolute; border: 1px solid #fff; }
     .size { position: absolute; background: #222; color: #fff; font: 12px system-ui, sans-serif; padding: 2px 6px;
-            border-radius: 4px; animation: cs-fade .1s ease-out both; }
+            border-radius: 999px; animation: cs-fade .1s ease-out both; }
     .pill, .bar { position: absolute; display: flex; gap: 8px; align-items: center; background: #222; color: #fff;
                   font: 14px system-ui, sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,.4); cursor: default; white-space: nowrap; }
     .pill { left: 50%; top: 16px; transform: translateX(-50%); padding: 6px 16px;
             animation: cs-drop .2s cubic-bezier(.2,.8,.3,1) both; }
     .bar { padding: 6px; transform-origin: 100% 0;
-           animation: cs-pop .16s cubic-bezier(.2,.85,.3,1.15) both; }
+           animation: cs-pop .2s cubic-bezier(.2,.8,.3,1) both; }
     /* One shape for every control in the extension: a capsule. */
     .pill, .bar { border-radius: 999px; }
     .pill button, .bar button { all: initial; font: 14px system-ui, sans-serif; color: #fff; background: #444;
                                 cursor: pointer; padding: 6px 12px; border-radius: 999px;
-                                transition: background .12s ease, transform .12s ease; }
+                                transition: background .12s ease, transform .12s ease, opacity .12s ease; }
     .pill button:hover, .bar button:hover { background: #666; }
     .pill button:active, .bar button:active { transform: scale(.96); }
     .pill button:focus-visible, .bar button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
     .bar button.primary { background: #1e88e5; }
     .bar button.primary:hover { background: #1976d2; }
+    /* The buttons dim, not the bar: cs-pop's fill mode pins the bar's opacity. */
+    .bar.busy button { opacity: .6; pointer-events: none; }
     .pill span { opacity: .7; }
     [hidden] { display: none !important; }
     @keyframes cs-fade { from { opacity: 0 } to { opacity: 1 } }
@@ -116,7 +125,10 @@
                          to { opacity: 1; transform: translateX(-50%) translateY(0) } }
     @keyframes cs-pop { from { opacity: 0; transform: translateY(-6px) scale(.94) }
                         to { opacity: 1; transform: none } }
-    @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important } }
+    @media (prefers-reduced-motion: reduce) {
+      :host { animation: none !important; }
+      * { animation: none !important; transition: none !important }
+    }
   `;
 
   function picker({ id, mode, snapshot }) {
@@ -124,10 +136,10 @@
       `<canvas></canvas><div class="dim"></div>` +
       `<div class="masks" hidden><div></div><div></div><div></div><div></div></div>` +
       `<div class="sel" hidden></div><div class="size" hidden></div>` +
-      `<div class="bar" hidden><button data-a="copy" class="primary">Copy</button><button data-a="save">Save</button><button data-a="edit">Edit</button></div>` +
+      `<div class="bar" hidden><button data-a="copy" class="primary">Copy (C)</button><button data-a="save">Save (S)</button><button data-a="edit">Edit (E)</button></div>` +
       `<div class="pill">Drag to capture an area` +
       (mode === "pick"
-        ? `<button data-k="f">Full page (F)</button><button data-k="v">Visible (V)</button><button data-k="s">Save now (S)</button>`
+        ? `<button data-k="f">Full page (F)</button><button data-k="v">Visible tab (V)</button><button data-k="s">Save visible tab (S)</button>`
         : ``) +
       `<span>Esc to cancel</span></div>`);
     const canvas = root.querySelector("canvas"), dim = root.querySelector(".dim");
@@ -194,16 +206,15 @@
       }
 
       // Copy. navigator.clipboard exists only in a secure context, so plain
-      // http:// pages hand the crop to the CoffeeShot tab instead.
+      // http:// pages hand the crop to the CoffeeShot tab, which says why.
       if (!window.isSecureContext || !navigator.clipboard || !window.ClipboardItem) {
         busy = true;
         close();
-        send({ type: "area", id, meta }).then((r) => {
-          toast(r.ok ? "This page cannot copy directly, so it opened in a CoffeeShot tab." : LOST);
-        });
+        send({ type: "area", id, meta, note: NO_COPY }).then((r) => { if (!r.ok) toast(LOST); });
         return;
       }
       busy = true;
+      bar.classList.add("busy");
       // write() is called inside the click with the PNG still pending, so the
       // crop can take as long as it likes without losing the user gesture.
       const png = (async () => {
@@ -215,9 +226,7 @@
         () => { close(); toast("Copied to clipboard."); send({ type: "cancel", id }); },
         () => {
           close();
-          send({ type: "area", id, meta }).then((r) => {
-            toast(r.ok ? "Brave blocked the copy, so it opened in a CoffeeShot tab." : LOST);
-          });
+          send({ type: "area", id, meta, note: NO_COPY }).then((r) => { if (!r.ok) toast(LOST); });
         }
       );
     };
@@ -225,9 +234,11 @@
     const onKey = (e) => {
       e.stopImmediatePropagation();
       e.preventDefault();
-      if (e.type !== "keydown" || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.type !== "keydown" || e.altKey) return;
       if (e.key === "Escape") { if (selRect) reset(); else finish("cancel"); return; }
       const k = e.key.toLowerCase();
+      // Ctrl+C and Ctrl+S mean the same as C and S; every other chord stays swallowed.
+      if ((e.ctrlKey || e.metaKey) && k !== "c" && k !== "s") return;
       if (selRect) {
         const a = SEL_ACTION[k];
         if (typeof a === "string") act(a);
@@ -393,7 +404,12 @@
       styled.push([node, prop, node.style.getPropertyValue(prop), node.style.getPropertyPriority(prop)]);
       node.style.setProperty(prop, value, "important");
     };
-    let capped = false;
+    let capped = false, cancelled = false;
+    // Esc stops the run. A listener only: anything added to the page would be
+    // in the strips.
+    const onKey = (e) => { if (e.key === "Escape") { e.stopImmediatePropagation(); e.preventDefault(); cancelled = true; } };
+    const check = () => { if (cancelled) throw new Error("cancelled"); };
+    window.addEventListener("keydown", onKey, true);
     try {
       // Smooth scrolling and scroll snapping would move the page under the shots.
       for (const n of el ? [rootEl, el] : [rootEl]) { force(n, "scroll-behavior", "auto"); force(n, "scroll-snap-type", "none"); }
@@ -406,11 +422,13 @@
       await frames(1);
       const candidates = pinnedCandidates(el);
       await settle;
+      check();
       const total = scroller.scrollHeight;
       let y = 0, prev = -1;
       for (let i = 0; ; i++) {
         scroller.scrollTop = y;
         await frames(2); await sleep(120);
+        check();
         const actual = Math.round(scroller.scrollTop);
         if (actual <= prev) break;                 // cannot advance: nothing more to capture
         prev = actual;
@@ -428,8 +446,9 @@
       if (!r.ok) throw new Error(LOST);
     } catch (err) {
       send({ type: "cancel", id });
-      toast(String((err && err.message) || err));
+      if (!cancelled) toast(String((err && err.message) || err));
     } finally {
+      window.removeEventListener("keydown", onKey, true);
       for (const [n, v, p] of hidden) n.style.setProperty("visibility", v, p);
       for (const [n, prop, v, p] of styled) n.style.setProperty(prop, v, p);
       scroller.scrollTop = saved.y; scroller.scrollLeft = saved.x;

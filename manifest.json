@@ -10,7 +10,7 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "CoffeeShot: drag an area, F full page, V visible tab, S save now",
+    "default_title": "CoffeeShot: drag to capture an area, full page (F), visible tab (V), save visible tab (S)",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",

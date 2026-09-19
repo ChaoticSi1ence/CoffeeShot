@@ -185,23 +185,24 @@ async function saveNow(tabId, dataUrl) {
   flash(tabId, "OK", "#2e7d32");
 }
 
-// One capture at a time. An idle picker in another tab gives way; a running
-// full-page capture does not.
-function preempt(tab) {
+// One capture at a time. An idle picker in another tab gives way, and the
+// next shot waits until its overlay is off the screen; a running full-page
+// capture does not give way.
+async function preempt(tab) {
   if (busyTab === null) return true;
   const job = pending(busyTab);
   if (!job) { busyTab = null; return true; }
-  if (job.mode === "full") { flash(tab.id, "...", "#455a64"); return false; }
-  chrome.tabs.sendMessage(job.tabId, { type: "close", id: job.id }).catch(() => {});
+  if (job.mode === "full") { flash(tab.id, "…", "#455a64"); return false; }
   drop(job);
+  await chrome.tabs.sendMessage(job.tabId, { type: "close", id: job.id }).catch(() => {});
   return true;
 }
 
 function refusal(tab, err) {
   if (/^file:/i.test(tab.url || "")) {
-    return "Brave refused the capture. Local files need \"Allow access to file URLs\" for CoffeeShot, on brave://extensions.";
+    return "Your browser refused the capture. Local files need \"Allow access to file URLs\" for CoffeeShot, on brave://extensions.";
   }
-  return `Brave refused the capture: ${(err && err.message) || err}`;
+  return `Your browser refused the capture: ${(err && err.message) || err}`;
 }
 
 // The capture is complete (or failed with something to say): hand it to a
@@ -224,7 +225,7 @@ async function open(job) {
 // mode: "pick" (toolbar click), or "area" / "full" / "visible" (context menu)
 async function start(tab, mode) {
   if ((tab.url || "").startsWith(chrome.runtime.getURL(""))) return flash(tab.id, "!", "#c62828");
-  if (!preempt(tab)) return;
+  if (!(await preempt(tab))) return;
   busyTab = tab.id;
   const job = newJob(tab, mode);
   try {
@@ -247,8 +248,8 @@ async function start(tab, mode) {
       job.mode = "visible";
       job.pick = true;   // the result tab offers the drag instead, whatever was asked for
       job.note = r && r.reason === "pdf"
-        ? "Brave's PDF viewer only allows the visible page. Drag on it here to pick an area, or Copy or Save the whole thing."
-        : "This page does not allow the picker or full-page capture. This is the visible tab: drag on it to pick an area, or Copy or Save the whole thing.";
+        ? "Your browser's PDF viewer only allows the visible tab. Drag on it to capture an area, or Copy or Save the whole visible tab."
+        : "This page does not allow the picker or full-page capture. This is the visible tab: drag on it to capture an area, or Copy or Save the whole visible tab.";
       return open(job);
     }
     touch(job);   // the page script drives from here
@@ -263,7 +264,8 @@ async function start(tab, mode) {
 
 // 1.0's path: visible tab straight to Downloads, no result tab.
 async function quickSave(tab) {
-  if (!preempt(tab)) return;
+  if ((tab.url || "").startsWith(chrome.runtime.getURL(""))) return flash(tab.id, "!", "#c62828");
+  if (!(await preempt(tab))) return;
   try {
     const dataUrl = await shot(tab.windowId);
     await chrome.downloads.download({
@@ -304,6 +306,7 @@ async function handle(msg) {
     case "area":
       job.mode = "area";
       job.meta = msg.meta;
+      if (msg.note) job.note = msg.note;
       open(job);
       return { ok: true };
     case "save-visible": {

@@ -6,6 +6,7 @@ const base = $("#base"), ink = $("#ink");
 const bctx = base.getContext("2d"), ictx = ink.getContext("2d");
 const id = location.hash.slice(1);
 const MAX_SIDE = 16384;   // memory and encode-time budget; Blink's own side limit is 65,535 px
+const LOST = "CoffeeShot lost the capture. Click the cup again.";
 
 let ready = false, saving = false, ops = [], cur = null, tool = "pen", color = "#e53935", stroke = 3;
 let live = null, frame = 0;   // bounds of the shape being dragged, and its queued frame
@@ -47,7 +48,7 @@ function setSize(w, h) {
 
 async function strip(i) {
   const r = await ask({ type: "strip", index: i });
-  if (!r || !r.ok || !r.dataUrl) throw new Error("the capture is gone");
+  if (!r || !r.ok || !r.dataUrl) throw new Error(LOST);
   return bitmap(r.dataUrl);
 }
 
@@ -57,23 +58,23 @@ async function load() {
   let job;
   try { job = await ask({ type: "job" }); } catch { job = null; }
   if (!job || !job.ok) {
-    status("Nothing to show. This capture is gone; take it again.");
+    status(LOST);
     disableAll();
     return;
   }
   if (job.note) { $("#note").textContent = job.note; $("#note").hidden = false; }
-  if (job.mode === "error") { status("No capture."); disableAll(); return; }
+  if (job.mode === "error") { disableAll(); return; }   // the note says what happened
   status("Loading…");
   try {
     if (job.mode === "full") await buildFull(job);
     else await buildOne(job);
   } catch (err) {
-    status(`Could not build the image: ${err.message}`);
+    status(err.message === LOST ? LOST : `Could not build the image: ${err.message}`);
     disableAll();
     return;
   }
   ready = true;
-  document.title = `CoffeeShot ${base.width}×${base.height}`;
+  document.title = `CoffeeShot ${base.width} × ${base.height}`;
   status(job.mode === "full" && job.meta && job.meta.capped ? "Stopped at 40 screens." : "");
   // The page refused the in-page picker, so the area is picked here instead.
   // On any other page that would be a second way to do what the picker did,
@@ -81,7 +82,7 @@ async function load() {
   if (job.pick) {
     $("#crop").hidden = false;
     pickTool("crop");
-    status("Drag to pick the area.");
+    status("Drag to crop.");
     // Fit the whole snapshot on screen while picking, so the drag never
     // needs a scroll. The crop's setSize puts the image back to true size.
     const room = innerHeight - $("header").offsetHeight - 24 - ($("#note").hidden ? 0 : $("#note").offsetHeight + 10);
@@ -250,7 +251,7 @@ function applyCrop(op) {
   const x = Math.max(0, Math.round(Math.min(ax, bx))), y = Math.max(0, Math.round(Math.min(ay, by)));
   const w = Math.min(base.width - x, Math.round(Math.abs(bx - ax)));
   const h = Math.min(base.height - y, Math.round(Math.abs(by - ay)));
-  if (w < 4 || h < 4) { status("Drag to pick the area."); return; }
+  if (w < 4 || h < 4) { status("Drag to crop."); return; }
   const keep = document.createElement("canvas");
   keep.width = base.width; keep.height = base.height;
   keep.getContext("2d").drawImage(base, 0, 0);
@@ -265,8 +266,8 @@ function applyCrop(op) {
   for (const o of ops) { o.pts = o.pts.map(([px, py]) => [px - x, py - y]); o.box = bounds(o); }
   if (inkSized) { ink.width = w; ink.height = h; redrawAll(); }
   inkRect = null;
-  document.title = `CoffeeShot ${w}×${h}`;
-  status(`Cropped to ${w} × ${h}. Enter saves, Ctrl+C copies, Ctrl+Z restores the whole tab.`);
+  document.title = `CoffeeShot ${w} × ${h}`;
+  status(`Cropped to ${w} × ${h}. Ctrl+Z restores the uncropped image.`);
   pickTool("pen");
 }
 
@@ -281,8 +282,8 @@ function undo() {
   ops = a.ops;
   if (inkSized) { ink.width = base.width; ink.height = base.height; redrawAll(); }
   inkRect = null;
-  document.title = `CoffeeShot ${base.width}×${base.height}`;
-  status("Crop undone.");
+  document.title = `CoffeeShot ${base.width} × ${base.height}`;
+  status("");
 }
 
 // Extend a pen stroke by its newest segment, leaving everything else alone.
@@ -369,12 +370,10 @@ $("#undo").addEventListener("click", undo);
 
 // This tab exists to mark the shot up. Once it has been copied or saved,
 // its job is done, so it gets out of the way.
-function closeSoon() {
-  setTimeout(async () => {
-    const tab = await chrome.tabs.getCurrent().catch(() => null);
-    if (tab) chrome.tabs.remove(tab.id).catch(() => {});
-  }, 900);
+function closeTab() {
+  chrome.tabs.getCurrent().then((tab) => { if (tab) chrome.tabs.remove(tab.id).catch(() => {}); }).catch(() => {});
 }
+function closeSoon() { setTimeout(closeTab, 900); }
 
 // With no markup there is nothing to merge, so the capture is encoded straight
 // from its own canvas instead of being copied into a second full-size one.
@@ -413,16 +412,14 @@ async function save() {
     chrome.downloads.onChanged.removeListener(onChanged);
     URL.revokeObjectURL(url);
   };
-  const onChanged = async (d) => {
+  const onChanged = (d) => {
     if (d.id !== dlId || !d.state) return;
     if (d.state.current === "complete") {
-      const [item] = await chrome.downloads.search({ id: dlId });
-      const name = item && item.filename ? item.filename.split(/[\\/]/).pop() : filename;
-      status(`Saved as ${name}`);
+      status("Saved to Downloads.");
       done();
       closeSoon();
     } else if (d.state.current === "interrupted") {
-      status(`Brave did not save the file (${(d.error && d.error.current) || "interrupted"}).`);
+      status(`Your browser did not save the file (${(d.error && d.error.current) || "interrupted"}).`);
       done();
     }
   };
@@ -431,7 +428,7 @@ async function save() {
     dlId = await chrome.downloads.download({ url, filename, saveAs: false, conflictAction: "uniquify" });
     setTimeout(() => {
       if (!saving) return;
-      status("Save not confirmed. Check Brave's download bubble.");
+      status("Save not confirmed. Check your browser's download bubble.");
       done();
     }, 60000);
   } catch (err) {
@@ -444,25 +441,33 @@ $("#copy").addEventListener("click", copy);
 $("#save").addEventListener("click", save);
 
 document.addEventListener("keydown", (e) => {
-  if (e.repeat) return;
+  if (e.repeat || e.altKey) return;
   const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
   if (mod && k === "z") { e.preventDefault(); undo(); }
   else if (e.key === "Escape" && cur) {
     const t = cur.tool;
     cur = null;
     if (t === "pen") redrawAll(); else if (live) { repaint(live); live = null; }
-    if (t === "crop") status("Drag to pick the area.");
+    if (t === "crop") status("Drag to crop.");
   }
-  else if (mod && k === "s") { e.preventDefault(); save(); }
-  else if (mod && k === "c") {
+  else if (e.key === "Escape") {
+    // Nothing drawn: the tab has nothing to lose, so Esc closes it. Not while
+    // a save is in flight, since closing revokes the blob under the download.
+    if (!actions.length && !saving) closeTab();
+  }
+  else if (k === "s") { e.preventDefault(); save(); }                    // S and Ctrl+S
+  else if (k === "c") {                                                  // C and Ctrl+C
     const s = getSelection();
-    if (s && !s.isCollapsed) return;          // let selected text copy as text
+    if (mod && s && !s.isCollapsed) return;   // Ctrl+C on selected text stays a text copy
     e.preventDefault(); copy();
-  } else if (!mod && !e.altKey) {
-    if (e.key === "Enter") { if (!(e.target instanceof HTMLButtonElement)) { e.preventDefault(); save(); } }
-    else if (k === "p") pickTool("pen"); else if (k === "r") pickTool("rect"); else if (k === "a") pickTool("arrow");
-    else if (k === "x" && !$("#crop").hidden) pickTool("crop");
   }
+  else if (mod) return;                                                  // other chords belong to the browser
+  else if (e.key === "Enter") {
+    // A focused Copy or Save clicks itself; anywhere else Enter is Copy.
+    if (e.target.id !== "copy" && e.target.id !== "save") { e.preventDefault(); copy(); }
+  }
+  else if (k === "p") pickTool("pen"); else if (k === "r") pickTool("rect"); else if (k === "a") pickTool("arrow");
+  else if (k === "x" && !$("#crop").hidden) pickTool("crop");
 });
 
 load();

@@ -8,10 +8,10 @@
 <body>
   <header>
     <div class="tools">
-      <button data-tool="pen" class="on" title="Pen (P)">Pen</button>
-      <button data-tool="rect" title="Rectangle (R)">Rectangle</button>
-      <button data-tool="arrow" title="Arrow (A)">Arrow</button>
-      <button data-tool="crop" id="crop" title="Pick an area (X)" hidden>Pick area</button>
+      <button data-tool="pen" class="on">Pen (P)</button>
+      <button data-tool="rect">Rectangle (R)</button>
+      <button data-tool="arrow">Arrow (A)</button>
+      <button data-tool="crop" id="crop" hidden>Crop (X)</button>
       <span class="colors">
         <button data-color="#e53935" class="on" style="background:#e53935" title="Red"></button>
         <button data-color="#fdd835" style="background:#fdd835" title="Yellow"></button>
@@ -23,8 +23,8 @@
     </div>
     <div class="actions">
       <span id="status"></span>
-      <button id="copy" title="Copy to clipboard (Ctrl+C)">Copy</button>
-      <button id="save" class="primary" title="Save to Downloads (Enter or Ctrl+S)" autofocus>Save</button>
+      <button id="copy" class="primary" title="Copy to clipboard (Enter or Ctrl+C)" autofocus>Copy (C)</button>
+      <button id="save" title="Save to Downloads (Ctrl+S)">Save (S)</button>
     </div>
   </header>
   <p id="note" hidden></p>
