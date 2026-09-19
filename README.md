@@ -34,8 +34,8 @@ Once you have dragged a rectangle, a small toolbar appears under its
 bottom-right corner: **Copy** puts the PNG on the clipboard, **Save** writes
 it to Downloads, and **Edit** opens it in a CoffeeShot tab for markup. Copy
 and Save finish on the page itself, with no tab in between. The keys are
-**C**, **S** and **E**, and **Esc** clears the selection so you can drag
-again.
+**C**, **S** and **E** (Ctrl+C and Ctrl+S work too), and **Esc** clears the
+selection so you can drag again.
 
 ![The toolbar under a selection, up close: Copy, Save, Edit. Copy or save right there.](store/screenshot-2.png)
 
@@ -43,17 +43,19 @@ again.
 
 Edit, full page and visible tab open a CoffeeShot tab next to the page. Draw on
 it with the pen (**P**), rectangle (**R**) or arrow (**A**) in four colours, or
-pick any colour you like from the swatch at the end of the row. **Ctrl+Z**
-undoes. **Copy** (Ctrl+C) puts the PNG on the clipboard and **Save** (Enter or
-Ctrl+S) writes `coffeeshot-YYYY-MM-DD_HH-MM-SS.png` to Downloads. The tab
-closes itself once you have copied or saved.
+pick any colour you like from the swatch at the end of the row. **Crop** (**X**)
+drags out a selection you can move, or resize by its corners; **Enter** applies
+it and **Esc** clears it. **Ctrl+Z** undoes. **Copy** (Enter, C or Ctrl+C) puts
+the PNG on the clipboard and **Save** (S or Ctrl+S) writes
+`coffeeshot-YYYY-MM-DD_HH-MM-SS.png` to Downloads. The tab closes itself once
+you have copied or saved, and **Esc** closes it if you have not drawn anything.
 
 ![The CoffeeShot tab, with a red rectangle and a blue arrow drawn on a capture. Mark it up. Then it gets out of the way.](store/screenshot-3.png)
 
 ### The whole page
 
 **F** scrolls the page for you, about two screens a second, and the cup counts
-the screens. It opens in the CoffeeShot tab, same as Edit and V.
+the screens. **Esc** stops it. It opens in the CoffeeShot tab, same as Edit and V.
 
 ![The CoffeeShot tab after F on this repo's GitHub page, with the top of the stitched capture in view. The whole page, stitched for you.](store/screenshot-4.png)
 
@@ -110,12 +112,11 @@ from the Chrome Web Store. A self-signed `.crx` dropped on
 
 - One capture at a time. Clicking the cup while a picker is waiting in another
   tab closes that picker and starts here; while a full-page capture is
-  running you get a "..." badge instead.
+  running you get a "…" badge instead.
 - `brave://` pages, the Web Store, other extensions' pages and the PDF viewer
   do not allow the picker or full page. On those the visible tab opens in the
-  CoffeeShot tab with a **Pick area** tool (X) already selected: drag the part
-  you want, then Copy or Save as usual. Ctrl+Z puts the whole tab back. That
-  tool only appears on pages that refused the picker.
+  CoffeeShot tab with **Crop** already selected: drag the part you want, press
+  Enter, then Copy or Save as usual. Ctrl+Z puts the whole tab back.
 - `file://` pages need "Allow access to file URLs" for CoffeeShot on
   `brave://extensions`; otherwise Brave refuses the capture and the result tab
   tells you.

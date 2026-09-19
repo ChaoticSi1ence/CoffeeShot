@@ -21,14 +21,14 @@ Once you have dragged a rectangle, a small toolbar appears at its corner with th
 - Save writes it to your downloads folder.
 - Edit opens it in a CoffeeShot tab so you can draw on it first.
 
-Copy and Save finish right there on the page. No extra tab opens and nothing interrupts you. The keys are C, S and E if you would rather not reach for the mouse, and Esc clears the selection so you can drag a different one.
+Copy and Save finish right there on the page. No extra tab opens and nothing interrupts you. The keys are C, S and E if you would rather not reach for the mouse (Ctrl+C and Ctrl+S work too), and Esc clears the selection so you can drag a different one.
 
 
 MARKING UP A SHOT
 
 Choosing Edit, or capturing the full page or the visible tab, opens a CoffeeShot tab beside the page you were on.
 
-Draw on it with a pen, a rectangle, or an arrow. Four colours are ready to go and there is a colour picker if you want a different one, including an eyedropper to match something already in the image. Ctrl+Z undoes. The tool keys are P, R and A.
+Draw on it with a pen, a rectangle, or an arrow. Four colours are ready to go and there is a colour picker if you want a different one, including an eyedropper to match something already in the image. Crop drags out a selection you can move or resize by its corners; Enter applies it and Esc clears it. Ctrl+Z undoes. The tool keys are P, R, A and X.
 
 When you are done, Copy puts the finished image on the clipboard and Save writes it to your downloads folder as coffeeshot-2026-09-05_14-05-33.png, or whatever the date and time happen to be. The tab then closes itself, because its job is finished.
 
@@ -60,7 +60,7 @@ LIMITS, STATED PLAINLY
 
 Some of these are the browser's rules rather than choices, but you should know about them before you install rather than after.
 
-Browser pages such as chrome:// and brave://, the extension store, other extensions' pages, and the built-in PDF viewer do not allow the picker to run on the page itself. On those, CoffeeShot opens the visible tab in its own tab with a Pick area tool ready, so you can still drag out the part you want and then copy or save it. Full-page capture is not possible there, because it needs to scroll the page and that is exactly what the browser forbids, and CoffeeShot says so instead of failing quietly.
+Browser pages such as chrome:// and brave://, the extension store, other extensions' pages, and the built-in PDF viewer do not allow the picker to run on the page itself. On those, CoffeeShot opens the visible tab in its own tab with the Crop tool ready, so you can still drag out the part you want and then copy or save it. Full-page capture is not possible there, because it needs to scroll the page and that is exactly what the browser forbids, and CoffeeShot says so instead of failing quietly.
 
 Local files opened from disk need "Allow access to file URLs" switched on for CoffeeShot on the extensions page. Without it the browser refuses the capture outright.
 
