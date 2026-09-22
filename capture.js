@@ -89,7 +89,7 @@
     .toast.out { animation: cs-out .3s ease-in both; }
     .bar { padding: 6px; transform-origin: 100% 0;
            animation: cs-pop .2s cubic-bezier(.2,.8,.3,1) both; }
-    .pill button, .bar button { all: initial; font: inherit; color: inherit; background: #444;
+    .pill button, .bar button { all: initial; display: inline-flex; align-items: center; gap: 6px; font: inherit; color: inherit; background: #444;
                                 cursor: pointer; padding: 6px 12px; border-radius: 999px;
                                 transition: background .12s ease, transform .12s ease, opacity .12s ease; }
     .pill button:hover, .bar button:hover { background: #666; }
@@ -100,6 +100,11 @@
     /* The buttons dim, not the bar: cs-pop's fill mode pins the bar's opacity. */
     .bar.busy button { opacity: .6; pointer-events: none; }
     .pill span { opacity: .7; }
+    /* Every key hint is a keycap. It borrows the text colour of the button it sits on,
+       so it reads the same on the grey, blue and dimmed buttons. */
+    kbd { display: inline-block; min-width: 20px; padding: 0 5px; box-sizing: border-box; font: 600 11px/17px system-ui, sans-serif;
+          text-align: center; color: inherit; border-radius: 5px; background: rgba(255,255,255,.14);
+          border: 1px solid rgba(255,255,255,.3); box-shadow: inset 0 -1px 0 rgba(255,255,255,.3); }
     [hidden] { display: none !important; }
     @keyframes cs-fade { from { opacity: 0 } to { opacity: 1 } }
     @keyframes cs-drop { from { opacity: 0; transform: translateY(-12px) } to { opacity: 1; transform: none } }
@@ -134,12 +139,12 @@
       `<canvas></canvas><div class="dim"></div>` +
       `<div class="masks" hidden><div></div><div></div><div></div><div></div></div>` +
       `<div class="sel" hidden></div><div class="size" hidden></div>` +
-      `<div class="bar" hidden><button data-a="copy" class="primary">Copy (C)</button><button data-a="save">Save (S)</button><button data-a="edit">Edit (E)</button></div>` +
+      `<div class="bar" hidden><button data-a="copy" class="primary">Copy <kbd>C</kbd></button><button data-a="save">Save <kbd>S</kbd></button><button data-a="edit">Edit <kbd>E</kbd></button></div>` +
       `<div class="pill">Drag to capture an area` +
       (mode === "pick"
-        ? `<button data-k="f">Full page (F)</button><button data-k="v">Visible tab (V)</button><button data-k="s">Save visible tab (S)</button>`
+        ? `<button data-k="f">Full page <kbd>F</kbd></button><button data-k="v">Visible tab <kbd>V</kbd></button><button data-k="s">Save visible tab <kbd>S</kbd></button>`
         : ``) +
-      `<span>Esc to cancel</span></div>`);
+      `<span><kbd>Esc</kbd> to cancel</span></div>`);
     const canvas = root.querySelector("canvas"), dim = root.querySelector(".dim");
     const sel = root.querySelector(".sel"), size = root.querySelector(".size");
     const masks = root.querySelector(".masks"), mask = masks.children;
